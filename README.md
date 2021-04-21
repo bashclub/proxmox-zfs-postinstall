@@ -1,4 +1,4 @@
-# proxmox-zfs-basics
+# proxmox-zfs-postinastall
 
 This script installs and configures basic tools for running a Proxmox Server.
 Following settings are made:
