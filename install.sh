@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define basic tools to install
-TOOLS="vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot"
+TOOLS="vim rpl ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot"
 
 # Define zfs-auto-snapshot retention policy
 SNAP_FREQUENT=8
@@ -24,11 +24,11 @@ DEBIAN_FRONTEND=nonintercative DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade
 DEBIAN_FRONTEND=nonintercative DEBIAN_PRIORITY=critical apt -y -qq install $TOOLS
 
 # configure zfs-auto-snapshot
-sed -i 's/keep=4/keep=$SNAP_FREQUENT/g' /etc/cron.d/zfs-auto-snapshot
-sed -i 's/keep=24/keep=$SNAP_HOURLY/g' /etc/cron.hourly/zfs-auto-snapshot
-sed -i 's/keep=31/keep=$SNAP_DAILY/g' /etc/cron.hourly/zfs-auto-snapshot
-sed -i 's/keep=8/keep=$SNAP_WEEKLY/g' /etc/cron.weekly/zfs-auto-snapshot
-sed -i 's/keep=8/keep=$SNAP_MONTHLY/g' /etc/cron.monthly/zfs-auto-snapshot
+rpl "keep=4" "keep=$SNAP_FREQUENT" /etc/cron.d/zfs-auto-snapshot
+rpl "keep=24" "keep=$SNAP_HOURLY" /etc/cron.hourly/zfs-auto-snapshot
+rpl "keep=31" "keep=$SNAP_DAILY" /etc/cron.hourly/zfs-auto-snapshot
+rpl "keep=8" "keep=$SNAP_WEEKLY" /etc/cron.weekly/zfs-auto-snapshot
+rpl "keep=8" "keep=$SNAP_MONTHLY" /etc/cron.monthly/zfs-auto-snapshot
 
 # set zfs_arc_limits
 ZFS_ARC_MIN_BYTES=$(($ZFS_ARC_MIN*1024*1024))
