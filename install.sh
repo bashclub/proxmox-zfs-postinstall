@@ -31,8 +31,8 @@ sed -i 's/keep=8/keep=$SNAP_WEEKLY/g' /etc/cron.weekly/zfs-auto-snapshot
 sed -i 's/keep=8/keep=$SNAP_MONTHLY/g' /etc/cron.monthly/zfs-auto-snapshot
 
 # set zfs_arc_limits
-ZFS_ARC_MIN_BYTES=$(($ZFS_ARC_MIN+1024*1024))
-ZFS_ARC_MAX_BYTES=$(($ZFS_ARC_MAX+1024*1024))
+ZFS_ARC_MIN_BYTES=$(($ZFS_ARC_MIN*1024*1024))
+ZFS_ARC_MAX_BYTES=$(($ZFS_ARC_MAX*1024*1024))
 
 echo $ZFS_ARC_MIN_BYTES > /sys/module/zfs/parameters/zfs_arc_min
 echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
