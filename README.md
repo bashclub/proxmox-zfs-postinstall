@@ -2,7 +2,7 @@
 
 This script installs and configures basic tools for running a Proxmox Server.
 Following settings are made:
-- Remove `pve-enterprise` repo
+- Disable `pve-enterprise` repo
 - Add `pve-no-subscription` repo
 - Upgrade system to latest version
 - Install basic tools: `vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl`
