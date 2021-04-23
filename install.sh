@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define basic tools to install
-TOOLS="vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc vim"
+TOOLS="vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl"
 
 # Define zfs-auto-snapshot retention policy
 SNAP_FREQUENT=8
