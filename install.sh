@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define basic tools to install
-TOOLS="vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot"
+TOOLS="vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc vim"
 
 # Define zfs-auto-snapshot retention policy
 SNAP_FREQUENT=8
@@ -14,8 +14,8 @@ SNAP_MONTHLY=3
 ZFS_ARC_MIN=128
 ZFS_ARC_MAX=256
 
-# remove pve-enterprise repo and add pve-no-subscription repo
-rm -f /etc/apt/sources.list.d/pve-enterprise.list
+# disable pve-enterprise repo and add pve-no-subscription repo
+mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
 echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
 apt update
 
@@ -42,4 +42,3 @@ options zfs zfs_arc_min=$ZFS_ARC_MIN_BYTES
 options zfs zfs_arc_min=$ZFS_ARC_MAX_BYTES
 EOF
 update-initramfs -u -k all
-
