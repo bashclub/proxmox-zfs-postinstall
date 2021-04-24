@@ -3,7 +3,7 @@
 ###### CONFIG SECTION ######
 
 # Define basic tools to install
-TOOLS="vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl"
+TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl"
 
 # Define target dataset for backup of /etc
 # IMPORTANT NOTE: Don't type in the leading /, this will be set where needed
@@ -151,4 +151,4 @@ if [ $? -ne 0 ]
     zfs create $PVE_CONF_BACKUP_TARGET
 fi
 
-echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -rtvupo /etc /$PVE_CONF_BACKUP_TARGET" > /etc/cron.d/pve-conf-backup
+echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -vhab --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
