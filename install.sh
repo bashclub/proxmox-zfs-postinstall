@@ -20,8 +20,8 @@ echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /
 apt update
 
 # update system and install basic tools
-DEBIAN_FRONTEND=nonintercative DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade
-DEBIAN_FRONTEND=nonintercative DEBIAN_PRIORITY=critical apt -y -qq install $TOOLS
+DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade
+DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $TOOLS
 
 # configure zfs-auto-snapshot
 rpl "keep=4" "keep=$SNAP_FREQUENT" /etc/cron.d/zfs-auto-snapshot
