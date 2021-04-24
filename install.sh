@@ -3,7 +3,7 @@
 ###### CONFIG SECTION ######
 
 # Define basic tools to install
-TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl"
+TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl lsb-release"
 
 ###### SYSTEM INFO AND INTERACTIVE CONFIGURATION SECTION ######
 
@@ -92,7 +92,7 @@ if [ $? -eq 0 ]; then
         fi
     done
 else
-    echo "'zfs-auto-snapshot' not installed yet, using scrpit defaults..."
+    echo "'zfs-auto-snapshot' not installed yet, using script defaults..."
 fi
 echo -e "######## CONFIGURE ZFS AUTO SNAPSHOT ########\n"
 for interval in "${!auto_snap_keep[@]}"; do
@@ -119,8 +119,10 @@ PVE_CONF_BACKUP_CRON_TIMER="*/15 * * * *"
 ###### INSTALLER SECTION ######
 
 # disable pve-enterprise repo and add pve-no-subscription repo
-mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
-echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
+if [[ "$(uname -r)" == *"-pve" ]]; then
+    mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
+    echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
+fi
 apt update
 
 # update system and install basic tools
