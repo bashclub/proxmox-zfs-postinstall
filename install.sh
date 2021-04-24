@@ -22,8 +22,8 @@ ARC_MAX_DEFAULT_BYTES=$(($MEM_TOTAL_BYTES / 2))
 ARC_MIN_DEFAULT_BYTES=$(($MEM_TOTAL_BYTES / 32))
 
 # get current settings
-ARC_MIN_SET_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_min)
-ARC_MAX_SET_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_max)
+ARC_MIN_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_min)
+ARC_MAX_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_max)
 
 # calculate suggested l1arc sice
 ZFS_ARC_MIN_BYTES=$(($ZPOOL_SIZE_SUM_BYTES / 4096))
@@ -41,13 +41,13 @@ else
 fi
 echo -e "\tDefault zfs_arc_max:\t$(($ARC_MAX_DEFAULT_BYTES / 1024 / 1024))\tMB"
 echo -e "Current l1arc configuration:"
-if [[ $ARC_MIN_SET_BYTES > 0 ]]; then
-    echo -e "\tCurrent zfs_arc_min:\t$(($ARC_MIN_SET_BYTES / 1024 / 1024))\tMB"
+if [ $ARC_MIN_CUR_BYTES -gt 0 ]; then
+    echo -e "\tCurrent zfs_arc_min:\t$(($ARC_MIN_CUR_BYTES / 1024 / 1024))\tMB"
 else
     echo -e "\tCurrent zfs_arc_min:\t0"
 fi
-if [[ $ARC_MAX_SET_BYTES > 0 ]]; then
-    echo -e "\tCurrent zfs_arc_max:\t$(($ARC_MAX_SET_BYTES / 1024 / 1024))\tMB"
+if [ $ARC_MAX_CUR_BYTES -gt 0 ]; then
+    echo -e "\tCurrent zfs_arc_max:\t$(($ARC_MAX_CUR_BYTES / 1024 / 1024))\tMB"
 else
     echo -e "\tCurrent zfs_arc_max:\t0"
 fi
