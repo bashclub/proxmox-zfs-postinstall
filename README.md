@@ -1,5 +1,7 @@
 # proxmox-zfs-postinstall
 
+`devel` branch is still under heavy development, so only use this script for testing.
+
 This script installs and configures basic tools for running a Proxmox Server.
 Following settings are made:
 - Disable `pve-enterprise` repo
@@ -8,3 +10,4 @@ Following settings are made:
 - Install basic tools: `vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl`
 - Configure snapshot retention for `zfs-auto-snapshot`
 - Set limits for level 1 arc (`zfs_arc_min` and `zfs_arc_max`)
+- Configure backup of `/etc` Folder
