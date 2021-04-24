@@ -15,7 +15,7 @@ source ./ZPOOL_SIZE_SUM_BYTES
 rm -f ./ZPOOL_SIZE_SUM_BYTES
 
 # get information about available ram
-MEM_TOTAL_BYTES=$(free -tb | tail -1 | cut -d ' ' -f3)
+MEM_TOTAL_BYTES=$(($(awk '/MemTotal/ {print $2}' /proc/meminfo) * 1024))
 
 # get values if defaults are set
 ARC_MAX_DEFAULT_BYTES=$(($MEM_TOTAL_BYTES / 2))
