@@ -12,6 +12,7 @@ TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop
 # get total size of all zpools
 zpool list -o size -Hp | while read line; do SUM=$(($SUM+$line)); echo "ZPOOL_SIZE_SUM_BYTES=$SUM" > ./ZPOOL_SIZE_SUM_BYTES; done
 source ./ZPOOL_SIZE_SUM_BYTES
+rm -f ./ZPOOL_SIZE_SUM_BYTES
 
 # get information about available ram
 MEM_TOTAL_BYTES=$(free -tb | tail -1 | cut -d ' ' -f3)
@@ -40,12 +41,12 @@ else
 fi
 echo -e "\tDefault zfs_arc_max:\t$(($ARC_MAX_DEFAULT_BYTES / 1024 / 1024))\tMB"
 echo -e "Current l1arc configuration:"
-if [ $ARC_MIN_SET_BYTES > 0 ]; then
+if [[ $ARC_MIN_SET_BYTES > 0 ]]; then
     echo -e "\tCurrent zfs_arc_min:\t$(($ARC_MIN_SET_BYTES / 1024 / 1024))\tMB"
 else
     echo -e "\tCurrent zfs_arc_min:\t0"
 fi
-if [ $ARC_MAX_SET_BYTES > 0 ]; then
+if [[ $ARC_MAX_SET_BYTES > 0 ]]; then
     echo -e "\tCurrent zfs_arc_max:\t$(($ARC_MAX_SET_BYTES / 1024 / 1024))\tMB"
 else
     echo -e "\tCurrent zfs_arc_max:\t0"
@@ -95,10 +96,12 @@ else
 fi
 echo -e "######## CONFIGURE ZFS AUTO SNAPSHOT ########\n"
 for interval in "${!auto_snap_keep[@]}"; do
-    echo "Please set how many $interval snapshots to keep (current: keep=${auto_snap_keep[$interval]})"
-    read
-    if [ "${auto_snap_keep[$interval]}" != "${REPLY}" ]; then
-        auto_snap_keep[$interval]=${REPLY}
+    read -p "Please set how many $interval snapshots to keep (current: keep=${auto_snap_keep[$interval]})" user_input
+    if echo "$user_input" | grep -qE '^[0-9]+$'; then
+        echo "Changing $interval from ${auto_snap_keep[$interval]} to $user_input"
+        auto_snap_keep[$interval]=$user_input
+    else
+        echo "No input - $interval unchanged."
     fi
 done
 
