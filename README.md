@@ -1,7 +1,5 @@
 # proxmox-zfs-postinstall
 
-`devel` branch is still under heavy development, so only use this script for testing.
-
 This script installs and configures basic tools for running a Proxmox Server.
 Following settings are made:
 - Disable `pve-enterprise` repo
