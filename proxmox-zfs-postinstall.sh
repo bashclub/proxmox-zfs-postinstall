@@ -111,8 +111,8 @@ done
 # IMPORTANT NOTE: Don't type in the leading /, this will be set where needed
 PVE_CONF_BACKUP_TARGET=rpool/pveconf
 
-# Define timer for your backup cronjob (default: every 15 minutes)
-PVE_CONF_BACKUP_CRON_TIMER="*/15 * * * *"
+# Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
+PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
 
 
 
@@ -154,7 +154,7 @@ EOF
 update-initramfs -u -k all
 
 # create backup jobs of /etc
-zfs list $PVE_CONF_BACKUP_TARGET
+zfs list $PVE_CONF_BACKUP_TARGET > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     zfs create $PVE_CONF_BACKUP_TARGET
 fi
