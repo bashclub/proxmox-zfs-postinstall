@@ -10,9 +10,8 @@ TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop
 #### L1ARC SIZE CONFIGURATION ####
 
 # get total size of all zpools
-zpool list -o size -Hp | while read line; do SUM=$(($SUM+$line)); echo "ZPOOL_SIZE_SUM_BYTES=$SUM" > ./ZPOOL_SIZE_SUM_BYTES; done
-source ./ZPOOL_SIZE_SUM_BYTES
-rm -f ./ZPOOL_SIZE_SUM_BYTES
+ZPOOL_SIZE_SUM_BYTES=0
+for line in $(zpool list -o size -Hp); do ZPOOL_SIZE_SUM_BYTES=$(($ZPOOL_SIZE_SUM_BYTES+$line)); done
 
 # get information about available ram
 MEM_TOTAL_BYTES=$(($(awk '/MemTotal/ {print $2}' /proc/meminfo) * 1024))
@@ -59,11 +58,11 @@ echo -e "zfs_arc_max:\t\t\t$(($ZFS_ARC_MAX_BYTES / 1024 / 1024))\tMB\t\t= 1 GB R
 echo ""
 RESULT=not_set
 while [ "$(echo $RESULT | awk '{print tolower($0)}')" != "y" ] && [ "$(echo $RESULT | awk '{print tolower($0)}')" != "n" ] && [ "$(echo $RESULT | awk '{print tolower($0)}')" != "" ]; do
-    echo "If you want to adjust the values yourself type 'y', type 'n' to apply the values by script policy [y/N]?"
+    echo "If you want to apply the values by script policy type 'y', type 'n' to adjust the values yourself [Y/n]?"
     read
     RESULT=${REPLY}
 done
-if [[ "$(echo $RESULT | awk '{print tolower($0)}')" == "y" ]]; then
+if [[ "$(echo $RESULT | awk '{print tolower($0)}')" == "n" ]]; then
     echo "Please type in the desired value in MB for 'zfs_arc_min' [$(($ZFS_ARC_MIN_BYTES / 1024 / 1024))]:"
     read
     if [[ ${REPLY} -gt 0 ]]; then
@@ -159,4 +158,4 @@ if [ $? -ne 0 ]; then
     zfs create $PVE_CONF_BACKUP_TARGET
 fi
 
-echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -vhab --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
