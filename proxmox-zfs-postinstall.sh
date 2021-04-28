@@ -5,6 +5,16 @@
 # Define basic tools to install
 TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl lsb-release"
 
+#### PVE CONF BACKUP CONFIGURATION ####
+
+# Define target dataset for backup of /etc
+# IMPORTANT NOTE: Don't type in the leading /, this will be set where needed
+PVE_CONF_BACKUP_TARGET=rpool/pveconf
+
+# Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
+PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
+
+
 ###### SYSTEM INFO AND INTERACTIVE CONFIGURATION SECTION ######
 
 #### L1ARC SIZE CONFIGURATION ####
@@ -104,17 +114,6 @@ for interval in "${!auto_snap_keep[@]}"; do
     fi
 done
 
-#### PVE CONF BACKUP CONFIGURATION ####
-
-# Define target dataset for backup of /etc
-# IMPORTANT NOTE: Don't type in the leading /, this will be set where needed
-PVE_CONF_BACKUP_TARGET=rpool/pveconf
-
-# Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
-PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
-
-
-
 ###### INSTALLER SECTION ######
 
 # disable pve-enterprise repo and add pve-no-subscription repo
@@ -135,7 +134,7 @@ DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $TOOL
 
 # configure zfs-auto-snapshot
 for interval in "${!auto_snap_keep[@]}"; do
-    echo "Setting zfs-auto-snapchot retention: $interval = ${auto_snap_keep[$interval]}"
+    echo "Setting zfs-auto-snapshot retention: $interval = ${auto_snap_keep[$interval]}"
     if [[ "$interval" == "frequent" ]]; then
         CURRENT=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
         if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
