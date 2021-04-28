@@ -17,6 +17,16 @@ PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
 
 ###### SYSTEM INFO AND INTERACTIVE CONFIGURATION SECTION ######
 
+ROUND_FACTOR=512
+
+roundup(){
+    echo $(((($1 + $ROUND_FACTOR) / $ROUND_FACTOR) * $ROUND_FACTOR))
+}
+
+roundoff(){
+    echo $((($1 / $ROUND_FACTOR) * $ROUND_FACTOR))
+}
+
 #### L1ARC SIZE CONFIGURATION ####
 
 # get total size of all zpools
@@ -35,8 +45,8 @@ ARC_MIN_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_min)
 ARC_MAX_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_max)
 
 # calculate suggested l1arc sice
-ZFS_ARC_MIN_BYTES=$(($ZPOOL_SIZE_SUM_BYTES / 4096))
-ZFS_ARC_MAX_BYTES=$(($ZPOOL_SIZE_SUM_BYTES / 1024))
+ZFS_ARC_MIN_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
+ZFS_ARC_MAX_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
 
 echo -e "######## CONFIGURE ZFS L1ARC SIZE ########\n"
 echo "System Summary:"
@@ -63,8 +73,8 @@ fi
 echo -e "Note: If your current values are 0, the calculated values above will apply."
 echo ""
 echo -e "The l1arc cache will be set relative to the size (sum) of your zpools by policy"
-echo -e "zfs_arc_min:\t\t\t$(($ZFS_ARC_MIN_BYTES / 1024 / 1024))\tMB\t\t= 256 MB RAM per 1 TB ZFS storage"
-echo -e "zfs_arc_max:\t\t\t$(($ZFS_ARC_MAX_BYTES / 1024 / 1024))\tMB\t\t= 1 GB RAM per 1 TB ZFS storage"
+echo -e "zfs_arc_min:\t\t\t$(($ZFS_ARC_MIN_MEGABYTES))\tMB\t\t= 512 MB RAM per 1 TB ZFS storage (round off in 512 MB steps)"
+echo -e "zfs_arc_max:\t\t\t$(($ZFS_ARC_MAX_MEGABYTES))\tMB\t\t= 1 GB RAM per 1 TB ZFS storage (round up in 512 MB steps)"
 echo ""
 RESULT=not_set
 while [ "$(echo $RESULT | awk '{print tolower($0)}')" != "y" ] && [ "$(echo $RESULT | awk '{print tolower($0)}')" != "n" ] && [ "$(echo $RESULT | awk '{print tolower($0)}')" != "" ]; do
@@ -73,15 +83,15 @@ while [ "$(echo $RESULT | awk '{print tolower($0)}')" != "y" ] && [ "$(echo $RES
     RESULT=${REPLY}
 done
 if [[ "$(echo $RESULT | awk '{print tolower($0)}')" == "n" ]]; then
-    echo "Please type in the desired value in MB for 'zfs_arc_min' [$(($ZFS_ARC_MIN_BYTES / 1024 / 1024))]:"
+    echo "Please type in the desired value in MB for 'zfs_arc_min' [$(($ZFS_ARC_MIN_MEGABYTES))]:"
     read
     if [[ ${REPLY} -gt 0 ]]; then
-        ZFS_ARC_MIN_BYTES=$((${REPLY} * 1024 * 1024))
+        ZFS_ARC_MIN_MEGABYTES=$((${REPLY}))
     fi
-    echo "Please type in the desired value in MB for 'zfs_arc_max' [$(($ZFS_ARC_MAX_BYTES / 1024 / 1024))]:"
+    echo "Please type in the desired value in MB for 'zfs_arc_max' [$(($ZFS_ARC_MAX_MEGABYTES))]:"
     read
     if [[ ${REPLY} -gt 0 ]]; then
-        ZFS_ARC_MAX_BYTES=$((${REPLY} * 1024 * 1024))
+        ZFS_ARC_MAX_MEGABYTES=$((${REPLY}))
     fi
 fi
 
@@ -155,6 +165,9 @@ if [ $? -ne 0 ]; then
     zfs create $PVE_CONF_BACKUP_TARGET
 fi
 echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+
+ZFS_ARC_MIN_BYTES=$((ZFS_ARC_MIN_MEGABYTES * 1024 *1024))
+ZFS_ARC_MAX_BYTES=$((ZFS_ARC_MAX_MEGABYTES * 1024 *1024))
 
 echo "Adjusting ZFS level 1 arc"
 echo $ZFS_ARC_MIN_BYTES > /sys/module/zfs/parameters/zfs_arc_min
