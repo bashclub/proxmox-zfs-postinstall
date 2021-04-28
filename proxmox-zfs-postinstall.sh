@@ -100,7 +100,7 @@ for interval in "${!auto_snap_keep[@]}"; do
         echo "Changing $interval from ${auto_snap_keep[$interval]} to $user_input"
         auto_snap_keep[$interval]=$user_input
     else
-        echo "No input - $interval unchanged."
+        echo "No input - $interval unchanged at ${auto_snap_keep[$interval]}."
     fi
 done
 
@@ -119,30 +119,45 @@ PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
 
 # disable pve-enterprise repo and add pve-no-subscription repo
 if [[ "$(uname -r)" == *"-pve" ]]; then
-    mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
+    echo "Deactivating pve-enterprise repository"
+    mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak > /dev/null 2>&1
+    echo "Activating pve-no-subscription repository"
     echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
 fi
-apt update
+echo "Getting latest package lists"
+apt update > /dev/null 2>&1
 
 # update system and install basic tools
-DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade
-DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $TOOLS
+echo "Upgrading system to latest version - Depending on your version this could take a while..."
+DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade > /dev/null 2>&1
+echo "Installing toolset - Depending on your version this could take a while..."
+DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $TOOLS > /dev/null 2>&1
 
 # configure zfs-auto-snapshot
 for interval in "${!auto_snap_keep[@]}"; do
+    echo "Setting zfs-auto-snapchot retention: $interval = ${auto_snap_keep[$interval]}"
     if [[ "$interval" == "frequent" ]]; then
         CURRENT=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
         if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
-            rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.d/zfs-auto-snapshot
+            rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.d/zfs-auto-snapshot > /dev/null 2>&1
         fi
     else
         CURRENT=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
         if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
-            rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.$interval/zfs-auto-snapshot
+            rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.$interval/zfs-auto-snapshot > /dev/null 2>&1
         fi
     fi
 done
 
+echo "Configuring pve-conf-backup"
+# create backup jobs of /etc
+zfs list $PVE_CONF_BACKUP_TARGET > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    zfs create $PVE_CONF_BACKUP_TARGET
+fi
+echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+
+echo "Adjusting ZFS level 1 arc"
 echo $ZFS_ARC_MIN_BYTES > /sys/module/zfs/parameters/zfs_arc_min
 echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
 
@@ -150,12 +165,8 @@ cat << EOF > /etc/modprobe.d/zfs.conf
 options zfs zfs_arc_min=$ZFS_ARC_MIN_BYTES
 options zfs zfs_arc_min=$ZFS_ARC_MAX_BYTES
 EOF
-update-initramfs -u -k all
 
-# create backup jobs of /etc
-zfs list $PVE_CONF_BACKUP_TARGET > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    zfs create $PVE_CONF_BACKUP_TARGET
-fi
+echo "Updating initramfs - This will take some time..."
+update-initramfs -u -k all > /dev/null 2>&1
 
-echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+echo "Proxmox postinstallation finished!"
