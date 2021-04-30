@@ -7,5 +7,6 @@ Following settings are made:
 - Upgrade system to latest version
 - Install basic tools: `sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl`
 - Configure snapshot retention for `zfs-auto-snapshot` interactively
-- Calculates limits for level 1 arc (`zfs_arc_min` and `zfs_arc_max`) based on all configured zpools
+- `zfs_arc_[min|max]` will be calculated by size sum of all zpools in 512 MB steps
 - Configure backup of `/etc` folder to new zfs dataset on `rpool/pveconf`
+- configure `vm.swappiness` interactively
