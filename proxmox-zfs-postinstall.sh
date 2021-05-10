@@ -12,7 +12,7 @@ TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop
 PVE_CONF_BACKUP_TARGET=rpool/pveconf
 
 # Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
-PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
+PVE_CONF_BACKUP_CRON_TIMER="3,18,33,48 * * * *"
 
 
 ###### SYSTEM INFO AND INTERACTIVE CONFIGURATION SECTION ######
@@ -192,7 +192,7 @@ echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
 
 cat << EOF > /etc/modprobe.d/zfs.conf
 options zfs zfs_arc_min=$ZFS_ARC_MIN_BYTES
-options zfs zfs_arc_min=$ZFS_ARC_MAX_BYTES
+options zfs zfs_arc_max=$ZFS_ARC_MAX_BYTES
 EOF
 
 echo "Updating initramfs - This will take some time..."
