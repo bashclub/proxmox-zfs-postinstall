@@ -12,7 +12,7 @@ TOOLS="sudo vim ifupdown2 net-tools dnsutils ethtool git curl unzip screen iftop
 PVE_CONF_BACKUP_TARGET=rpool/pveconf
 
 # Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
-PVE_CONF_BACKUP_CRON_TIMER="3/15 * * * *"
+PVE_CONF_BACKUP_CRON_TIMER="3,18,33,48 * * * *"
 
 
 ###### SYSTEM INFO AND INTERACTIVE CONFIGURATION SECTION ######
