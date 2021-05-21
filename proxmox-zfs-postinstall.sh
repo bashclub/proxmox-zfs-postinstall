@@ -225,7 +225,13 @@ if [[ "$install_checkmk" == "y" ]]; then
         curl_opts="--insecure"
     fi
     wget -q -O /usr/local/bin/check_mk_agent $wget_opts $cmk_agent_url/check_mk/agents/check_mk_agent.linux
+    wget -q -O /usr/local/bin/mk-job $wget_opts $cmk_agent_url/check_mk/agents/mk-job
+    wget -q -O /usr/local/bin/check_mk_caching_agent  $wget_opts $cmk_agent_url/check_mk/agents/check_mk_caching_agent.linux
+    wget -q -O /usr/local/bin/waitmax  $wget_opts $cmk_agent_url/check_mk/agents/waitmax
     chmod +x /usr/local/bin/check_mk_agent
+    chmod +x /usr/local/bin/mk-job
+    chmod +x /usr/local/bin/check_mk_caching_agent
+    chmod +x /usr/local/bin/waitmax
     /usr/local/bin/check_mk_agent > /dev/null
     wget -q -O /etc/systemd/system/check_mk.socket $wget_opts $cmk_agent_url/check_mk/agents/cfg_examples/systemd/check_mk.socket
     cat << EOF > /etc/systemd/system/check_mk@.service
@@ -245,8 +251,9 @@ Group=root
 StandardInput=socket
 EOF
 
-    #AgentDirectory: /etc/check_mk
+    mkdir -p /etc/check_mk
     if [[ "$cmk_encrypt" == "y" ]]; then
+        mkdir -p /etc/check_mk
         cat << EOF > /etc/check_mk/encryption.cfg
 ENCRYPTED=yes
 PASSPHRASE='$cmk_enc_pass'
@@ -254,9 +261,11 @@ EOF
     chmod 600 /etc/check_mk/encryption.cfg
     fi
 
-    #DataDirectory: /var/lib/check_mk_agent
-    #SpoolDirectory: /var/lib/check_mk_agent/spool
-    #PluginsDirectory: /usr/lib/check_mk_agent/plugins
+    mkdir -p /var/lib/check_mk_agent
+    mkdir -p /var/lib/check_mk_agent/spool
+    mkdir -p /var/lib/check_mk_agent/job
+    mkdir -p /usr/lib/check_mk_agent/local
+    mkdir -p /usr/lib/check_mk_agent/plugins
     wget -q -O /usr/lib/check_mk_agent/plugins/smart $wget_opts $cmk_agent_url/check_mk/agents/plugins/smart
     chmod +x /usr/lib/check_mk_agent/plugins/smart
     wget -q -O /usr/lib/check_mk_agent/plugins/mk_inventory $wget_opts $cmk_agent_url/check_mk/agents/plugins/mk_inventory.linux
@@ -269,7 +278,7 @@ EOF
     systemctl restart sockets.target
 
     if [[ "$cmk_register" == "y" ]]; then
-        cmk_request="request={\"hostname\":\"$(echo -n $(hostname -f))\",\"folder\":\"$cmk_folder\",\"attributes\":{\"ipaddress\":\"$cmk_reg_ip\",\"site\":\"$cmk_site\",\"tag_agent\":\"\"},\"create_folders\":\"1\"}"
+        cmk_request="request={\"hostname\":\"$(echo -n $(hostname -f))\",\"folder\":\"$cmk_folder\",\"attributes\":{\"ipaddress\":\"$cmk_reg_ip\",\"site\":\"$cmk_site\",\"tag_agent\":\"cmk-agent\"},\"create_folders\":\"1\"}"
         curl $curl_opts "$cmk_agent_url/check_mk/webapi.py?action=add_host&_secret=$cmk_secret&_username=automation" -d $cmk_request
         curl $curl_opts "$cmk_agent_url/check_mk/webapi.py?action=activate_changes&_secret=$cmk_secret&_username=automation" -d "request={\"sites\":[\"$cmk_site\"],\"allow_foreign_changes\":\"0\"}"
     fi
