@@ -78,18 +78,15 @@ echo -e "zfs_arc_max:\t\t\t$(($ZFS_ARC_MAX_MEGABYTES))\tMB\t\t= 1 GB RAM per 1 T
 echo ""
 RESULT=not_set
 while [ "$(echo $RESULT | awk '{print tolower($0)}')" != "y" ] && [ "$(echo $RESULT | awk '{print tolower($0)}')" != "n" ] && [ "$(echo $RESULT | awk '{print tolower($0)}')" != "" ]; do
-    echo "If you want to apply the values by script policy type 'y', type 'n' to adjust the values yourself [Y/n]?"
-    read
+    read -p "If you want to apply the values by script policy type 'y', type 'n' to adjust the values yourself [Y/n]? "
     RESULT=${REPLY}
 done
 if [[ "$(echo $RESULT | awk '{print tolower($0)}')" == "n" ]]; then
-    echo "Please type in the desired value in MB for 'zfs_arc_min' [$(($ZFS_ARC_MIN_MEGABYTES))]:"
-    read
+    read -p "Please type in the desired value in MB for 'zfs_arc_min' [$(($ZFS_ARC_MIN_MEGABYTES))]: "
     if [[ ${REPLY} -gt 0 ]]; then
         ZFS_ARC_MIN_MEGABYTES=$((${REPLY}))
     fi
-    echo "Please type in the desired value in MB for 'zfs_arc_max' [$(($ZFS_ARC_MAX_MEGABYTES))]:"
-    read
+    read -p "Please type in the desired value in MB for 'zfs_arc_max' [$(($ZFS_ARC_MAX_MEGABYTES))]: "
     if [[ ${REPLY} -gt 0 ]]; then
         ZFS_ARC_MAX_MEGABYTES=$((${REPLY}))
     fi
@@ -136,6 +133,32 @@ for interval in "${!auto_snap_keep[@]}"; do
         echo "No input - $interval unchanged at ${auto_snap_keep[$interval]}."
     fi
 done
+
+#### CHECKMK AGENT CONFIGURATION ####
+read -p "Do you want to install checkmk agent of this machine? [y/N] " install_checkmk
+if [[ "$install_checkmk" == "y" ]]; then
+    read -p "Please specify the base url to your checkmk server (e.g. https://check.zmb.rocks/bashclub): " cmk_agent_url
+    read -p "Enable agent encryption (requires setup of Agent Encryption on your checkmk instance). Do you want to activate agent encryption? [y/N] " cmk_encrypt
+    if [[ "$cmk_encrypt" == "y" ]]; then
+        read -p "Please enter the encryption passphrase: " cmk_enc_pass
+    fi
+    read -p "Register your machine on your checkmk server (requires preconfigured automation secret)? [y/N] " cmk_register
+    if [[ "$cmk_register" == "y" ]]; then
+        read -p "Please enter your automation secret: " cmk_secret
+        read -p "Please enter the folder where to store the host: " cmk_folder
+        cmk_site=$(echo $cmk_agent_url | cut -d'/' -f4)
+        read -p "Please enter the checkmk site name: [$cmk_site]" user_input
+        if [[ $(echo -n "$user_input") != "" ]]; then
+            cmk_site=$user_input
+        fi
+        echo "Please select which agent ip address to register:"
+        select ip in $(ip a | grep "inet " | cut -d ' ' -f6 | cut -d/ -f1); do
+            cmk_reg_ip=$ip
+            break
+        done
+    fi
+fi
+
 
 ###### INSTALLER SECTION ######
 
@@ -192,8 +215,65 @@ echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
 
 cat << EOF > /etc/modprobe.d/zfs.conf
 options zfs zfs_arc_min=$ZFS_ARC_MIN_BYTES
-options zfs zfs_arc_max=$ZFS_ARC_MAX_BYTES
+options zfs zfs_arc_min=$ZFS_ARC_MAX_BYTES
 EOF
+
+if [[ "$install_checkmk" == "y" ]]; then
+    echo "Installing checkmk agent..."
+    if [[ $( echo -n "$(openssl s_client -connect $(echo $cmk_agent_url | cut -d'/' -f3):443  <<< "Q" 2>/dev/null | grep "Verify return code" | cut -d ' ' -f4)" ) -gt 0 ]]; then
+        wget_opts="--no-check-certificate"
+        curl_opts="--insecure"
+    fi
+    wget -q -O /usr/local/bin/check_mk_agent $wget_opts $cmk_agent_url/check_mk/agents/check_mk_agent.linux
+    chmod +x /usr/local/bin/check_mk_agent
+    /usr/local/bin/check_mk_agent > /dev/null
+    wget -q -O /etc/systemd/system/check_mk.socket $wget_opts $cmk_agent_url/check_mk/agents/cfg_examples/systemd/check_mk.socket
+    cat << EOF > /etc/systemd/system/check_mk@.service
+# systemd service definition file
+[Unit]
+Description=Check_MK
+
+[Service]
+# "-" path prefix makes systemd record the exit code,
+# but the unit is not set to failed.
+ExecStart=-/usr/local/bin/check_mk_agent
+Type=forking
+
+User=root
+Group=root
+
+StandardInput=socket
+EOF
+
+    #AgentDirectory: /etc/check_mk
+    if [[ "$cmk_encrypt" == "y" ]]; then
+        cat << EOF > /etc/check_mk/encryption.cfg
+ENCRYPTED=yes
+PASSPHRASE='$cmk_enc_pass'
+EOF
+    chmod 600 /etc/check_mk/encryption.cfg
+    fi
+
+    #DataDirectory: /var/lib/check_mk_agent
+    #SpoolDirectory: /var/lib/check_mk_agent/spool
+    #PluginsDirectory: /usr/lib/check_mk_agent/plugins
+    wget -q -O /usr/lib/check_mk_agent/plugins/smart $wget_opts $cmk_agent_url/check_mk/agents/plugins/smart
+    chmod +x /usr/lib/check_mk_agent/plugins/smart
+    wget -q -O /usr/lib/check_mk_agent/plugins/mk_inventory $wget_opts $cmk_agent_url/check_mk/agents/plugins/mk_inventory.linux
+    chmod +x /usr/lib/check_mk_agent/plugins/mk_inventory
+    wget -q -O /usr/lib/check_mk_agent/plugins/mk_apt $wget_opts $cmk_agent_url/check_mk/agents/plugins/mk_apt
+    chmod +x /usr/lib/check_mk_agent/plugins/mk_apt
+    #LocalDirectory: /usr/lib/check_mk_agent/local
+    systemctl daemon-reload
+    systemctl enable check_mk.socket
+    systemctl restart sockets.target
+
+    if [[ "$cmk_register" == "y" ]]; then
+        cmk_request="request={\"hostname\":\"$(echo -n $(hostname -f))\",\"folder\":\"$cmk_folder\",\"attributes\":{\"ipaddress\":\"$cmk_reg_ip\",\"site\":\"$cmk_site\",\"tag_agent\":\"\"},\"create_folders\":\"1\"}"
+        curl $curl_opts "$cmk_agent_url/check_mk/webapi.py?action=add_host&_secret=$cmk_secret&_username=automation" -d $cmk_request
+        curl $curl_opts "$cmk_agent_url/check_mk/webapi.py?action=activate_changes&_secret=$cmk_secret&_username=automation" -d "request={\"sites\":[\"$cmk_site\"],\"allow_foreign_changes\":\"0\"}"
+    fi
+fi
 
 echo "Updating initramfs - This will take some time..."
 update-initramfs -u -k all > /dev/null 2>&1
