@@ -215,7 +215,7 @@ echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
 
 cat << EOF > /etc/modprobe.d/zfs.conf
 options zfs zfs_arc_min=$ZFS_ARC_MIN_BYTES
-options zfs zfs_arc_min=$ZFS_ARC_MAX_BYTES
+options zfs zfs_arc_max=$ZFS_ARC_MAX_BYTES
 EOF
 
 if [[ "$install_checkmk" == "y" ]]; then
