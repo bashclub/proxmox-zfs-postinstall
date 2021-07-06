@@ -14,6 +14,8 @@ PVE_CONF_BACKUP_TARGET=rpool/pveconf
 # Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
 PVE_CONF_BACKUP_CRON_TIMER="3,18,33,48 * * * *"
 
+# Get Debian version info
+source /etc/os-release
 
 ###### SYSTEM INFO AND INTERACTIVE CONFIGURATION SECTION ######
 
@@ -167,7 +169,7 @@ if [[ "$(uname -r)" == *"-pve" ]]; then
     echo "Deactivating pve-enterprise repository"
     mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak > /dev/null 2>&1
     echo "Activating pve-no-subscription repository"
-    echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
+    echo "deb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
 fi
 echo "Getting latest package lists"
 apt update > /dev/null 2>&1
