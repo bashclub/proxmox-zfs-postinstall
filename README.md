@@ -9,4 +9,6 @@ Following settings are made:
 - Configure snapshot retention for `zfs-auto-snapshot` interactively
 - `zfs_arc_[min|max]` will be calculated by size sum of all zpools in 512 MB steps
 - Configure backup of `/etc` folder to new zfs dataset on `rpool/pveconf`
-- configure `vm.swappiness` interactively
+- Configure `vm.swappiness` interactively
+- Install checkmk Agent with optional encryption and registration
+- Added Support for Proxmox VE 7.0
