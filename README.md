@@ -12,3 +12,11 @@ Following settings are made:
 - Configure `vm.swappiness` interactively
 - Install checkmk Agent with optional encryption and registration
 - Added Support for Proxmox VE 7.0
+
+# Usage
+
+Just download and execute the script, all settings are made interactively.
+```
+wget https://github.com/bashclub/proxmox-zfs-postinstall/raw/main/proxmox-zfs-postinstall.sh
+bash ./proxmox-zfs-postinstall.sh
+```
