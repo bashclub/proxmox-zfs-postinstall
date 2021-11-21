@@ -54,6 +54,7 @@ cat << EOF > /etc/cockpit/zfs/config.json
     }
   }
 }
+EOF
 cat << EOF > /etc/cockpit/zfs/shares.conf 
 # COCKPIT ZFS MANAGER
 # WARNING: DO NOT EDIT, AUTO-GENERATED CONFIGURATION
