@@ -206,7 +206,10 @@ zfs list $PVE_CONF_BACKUP_TARGET > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     zfs create $PVE_CONF_BACKUP_TARGET
 fi
-echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+
+if [[ "$(df -h -t zfs | grep /$ | cut -d ' ' -f1)" == "rpool/ROOT/pve-1" ]] ; then
+  echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+fi
 
 ZFS_ARC_MIN_BYTES=$((ZFS_ARC_MIN_MEGABYTES * 1024 *1024))
 ZFS_ARC_MAX_BYTES=$((ZFS_ARC_MAX_MEGABYTES * 1024 *1024))
