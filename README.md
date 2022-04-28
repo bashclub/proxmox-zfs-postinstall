@@ -12,6 +12,7 @@ Following settings are made:
 - Configure `vm.swappiness` interactively
 - Install checkmk Agent with optional encryption and registration
 - Added Support for Proxmox VE 7.0
+- Added Proxmox SDN features
 
 # Usage
 
