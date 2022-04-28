@@ -174,6 +174,12 @@ fi
 echo "Getting latest package lists"
 apt update > /dev/null 2>&1
 
+# include interfaces.d to enable SDN features
+q=$(cat /etc/network/interfaces | grep "source /etc/network/interfaces.d/*")
+if [ $? -gt 0 ]; then
+    echo "source /etc/network/interfaces.d/*" >> /etc/network/interfaces
+fi
+
 # update system and install basic tools
 echo "Upgrading system to latest version - Depending on your version this could take a while..."
 DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade > /dev/null 2>&1
