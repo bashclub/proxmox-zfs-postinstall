@@ -1,6 +1,0 @@
-#!/bin/bash
-DOMAIN=org.bashclub
-
-apt update
-DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install targetcli-fb
-echo -e "cd iscsi\ncreate iqn.$(date '+%Y-%m').$DOMAIN.iscsi\nexit" | targetcli
