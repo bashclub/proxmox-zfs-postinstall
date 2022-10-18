@@ -167,9 +167,9 @@ fi
 # disable pve-enterprise repo and add pve-no-subscription repo
 
 #Not tested, yet!
-read -p "Do you want to disable pve-enterprise repo and add pve-no-subscription repo (y/n)? " response
+read -p "Do you want to disable pve-enterprise repo and add pve-no-subscription repo (y/N)? " response
 
-if [ "$response" == "y" ]; then
+if [ "${response,,}" == "y" ]; then
     if [[ "$(uname -r)" == *"-pve" ]]; then
         echo "Deactivating pve-enterprise repository"
         mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak > /dev/null 2>&1
