@@ -14,6 +14,7 @@ DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install -y -qq --no-
 
 dc_version=$(wget -O - -q https://api.github.com/repos/docker/compose/releases/latest | grep -m1 "\"name\":" | cut -d'"' -f4)
 wget -O /usr/local/bin/docker-compose https://github.com/docker/compose/releases/download/${dc_version}/docker-compose-linux-x86_64
+chmod +x /usr/local/bin/docker-compose
 
 # install portainer
 cd /portainer
