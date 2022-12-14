@@ -3,7 +3,7 @@
 ###### CONFIG SECTION ######
 
 # Define basic tools to install
-TOOLS="sudo vim ifupdown2 libpve-network-perl net-tools dnsutils ethtool git curl unzip screen iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl lsb-release"
+TOOLS="sudo vim ifupdown2 libpve-network-perl net-tools dnsutils ethtool git curl unzip screen tmux iftop lshw smartmontools nvme-cli lsscsi sysstat zfs-auto-snapshot htop mc rpl lsb-release"
 
 #### PVE CONF BACKUP CONFIGURATION ####
 
@@ -11,7 +11,7 @@ TOOLS="sudo vim ifupdown2 libpve-network-perl net-tools dnsutils ethtool git cur
 # IMPORTANT NOTE: Don't type in the leading /, this will be set where needed
 PVE_CONF_BACKUP_TARGET=rpool/pveconf
 
-# Define timer for your backup cronjob (default: every 15 minutes fron 3 through 59)
+# Define timer for your backup cronjob (default: every 15 minutes from 3 through 59)
 PVE_CONF_BACKUP_CRON_TIMER="3,18,33,48 * * * *"
 
 # Get Debian version info
@@ -137,7 +137,7 @@ for interval in "${!auto_snap_keep[@]}"; do
 done
 
 #### CHECKMK AGENT CONFIGURATION ####
-read -p "Do you want to install checkmk agent of this machine? [y/N] " install_checkmk
+read -p "Do you want to install checkmk agent on this machine? [y/N] " install_checkmk
 if [[ "$install_checkmk" == "y" ]]; then
     read -p "Please specify the base url to your checkmk server (e.g. https://check.zmb.rocks/bashclub): " cmk_agent_url
     read -p "Enable agent encryption (requires setup of Agent Encryption on your checkmk instance). Do you want to activate agent encryption? [y/N] " cmk_encrypt
