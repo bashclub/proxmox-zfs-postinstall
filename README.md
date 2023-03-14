@@ -22,5 +22,5 @@ wget https://github.com/bashclub/proxmox-zfs-postinstall/raw/main/proxmox-zfs-po
 bash ./proxmox-zfs-postinstall.sh
 ```
 
-Author: Thorsten Spille
-[<img src="https://storage.ko-fi.com/cdn/brandasset/kofi_s_tag_dark.png">](https://ko-fi.com/thorakel)
+Author: Thorsten Spille<br>
+[<img src="https://storage.ko-fi.com/cdn/brandasset/kofi_s_tag_dark.png" rel="Support me on Ko-Fi">](https://ko-fi.com/thorakel)
