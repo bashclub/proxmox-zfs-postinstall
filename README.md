@@ -21,3 +21,6 @@ Just download and execute the script, all settings are made interactively.
 wget https://github.com/bashclub/proxmox-zfs-postinstall/raw/main/proxmox-zfs-postinstall.sh
 bash ./proxmox-zfs-postinstall.sh
 ```
+
+Author: Thorsten Spille
+[<img src="https://storage.ko-fi.com/cdn/brandasset/kofi_s_tag_dark.png">](https://ko-fi.com/thorakel)
