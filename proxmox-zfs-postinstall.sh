@@ -99,7 +99,7 @@ fi
 echo -e "######## CONFIGURE SWAPPINESS ########\n"
 SWAPPINESS=$(cat /proc/sys/vm/swappiness)
 echo "The current swappiness is configured to '$SWAPPINESS %' of free memory until using swap."
-read -p "If you want to change the swappiness, please type in the percentage as number (0 = diasbled):" user_input
+read -p "If you want to change the swappiness, please type in the percentage as number (0 = disabled):" user_input
 if echo "$user_input" | grep -qE '^[0-9]+$'; then
     echo "Changing swappiness from '$SWAPPINESS %' to '$user_input %'"
     SWAPPINESS=$user_input
