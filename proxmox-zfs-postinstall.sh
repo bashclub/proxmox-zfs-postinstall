@@ -165,16 +165,23 @@ fi
 ###### INSTALLER SECTION ######
 
 # disable pve-enterprise repo and add pve-no-subscription repo
-if [[ "$(uname -r)" == *"-pve" ]]; then
-    echo "Deactivating pve-enterprise repository"
-    mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak > /dev/null 2>&1
-    echo "Activating pve-no-subscription repository"
-    q=$(cat /etc/apt/sources.list | grep "pve-no-subscription")
-    if [ $? -gt 0 ]; then
-        echo "deb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription" >> /etc/apt/sources.list
+
+#Not tested, yet!
+read -p "Do you want to disable pve-enterprise repo and add pve-no-subscription repo (y/N)? " response
+
+if [ "${response,,}" == "y" ]; then
+    if [[ "$(uname -r)" == *"-pve" ]]; then
+        echo "Deactivating pve-enterprise repository"
+        mv /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak > /dev/null 2>&1
+        echo "Activating pve-no-subscription repository"
+        q=$(cat /etc/apt/sources.list | grep "pve-no-subscription")
+        if [ $? -gt 0 ]; then
+            echo "deb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription" >> /etc/apt/sources.list
+        fi
+        rm -f /etc/apt/sources.list.d/pve-no-subscription.list
     fi
-    rm -f /etc/apt/sources.list.d/pve-no-subscription.list
 fi
+
 echo "Getting latest package lists"
 apt update > /dev/null 2>&1
 
