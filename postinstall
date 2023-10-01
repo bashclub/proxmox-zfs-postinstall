@@ -259,7 +259,22 @@ set_locales(){
 }
 
 set_pve_repo(){
-    echo ""
+    nosub=$(grep pve-no-subscription /etc/apt/sources.list)
+    enterprise=$(grep pve-enterprise /etc/apt/sources.list.d/pve-enterprise.list)
+    test=$(grep pvetest /etc/apt/sources.list)
+    if [[ $repo_selection == "pve-enterprise" ]]; then
+        pvesh set nodes/px1/apt/repositories --handle enterprise
+        sed -i "s/$nosub/# $nosub/g" /etc/apt/sources.list
+        sed -i "s/$test/# $test/g" /etc/apt/sources.list
+    elif [[ $repo_selection == "pve-no-subscription" ]]; then
+        pvesh set nodes/px1/apt/repositories --handle no-subscription
+        sed -i "s/$enterprise/# $enterprise/g" /etc/apt/sources.list.d/pve-enterprise.list
+        sed -i "s/$test/# $test/g" /etc/apt/sources.list
+    elif [[ $repo_selection == "pvetest" ]]; then
+        pvesh set nodes/px1/apt/repositories --handle test
+        sed -i "s/$nosub/# $nosub/g" /etc/apt/sources.list
+        sed -i "s/$enterprise/# $enterprise/g" /etc/apt/sources.list.d/pve-enterprise.list
+    fi
 }
 
 update_system(){
