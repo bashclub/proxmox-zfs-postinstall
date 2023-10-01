@@ -17,9 +17,10 @@
 # + SSH server hardening
 # + Install checkzfs
 # + Install bashclub-zsync
-# - Create zfspool storage for swap disks if not exists
+# + Create zfspool storage for swap disks if not exists
+# + Adjust default volblocksize for Proxmox zfspool storages
+# - Configure swap file
 # - Configure proxmox mail delivery with postfix
-# - Adjust default volblocksize for Proxmox zfspool storages
 #
 #
 # Author: (C) 2023 Thorsten Spille <thorsten@bashclub.org>
@@ -379,11 +380,20 @@ set_mail_delivery(){
 }
 
 create_swap_pool(){
-    echo ""
+    if ! pvesm status | grep swap; then
+        if ! zfs list rpool/swap > /dev/null 2>&1 ; then
+            zfs create -O com.sun:auto-snapshot=false rpool/swap
+        else
+            zfs set com.sun:auto-snapshot=false rpool/swap
+        fi
+        pvesm add zfspool swap --blocksize 16k --content images,rootdir --pool rpool/swap
+    fi
 }
 
 set_default_volblocksize(){
-    echo ""
+    for storage in $(pvesm status | grep zfspool | cut -d' ' -f1); do
+        pvesm set $storage --blocksize 16k
+    done
 }
 
 install_checkzfs(){
