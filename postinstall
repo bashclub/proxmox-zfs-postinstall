@@ -383,6 +383,21 @@ installation_task(){
 
 }
 
+summary(){
+    whiptail --title "POSTINSTALL SUMMARY" \
+    --backtitle $PROG \
+    --yes-button "INSTALL" \
+    --no-button "ABORT & EXIT" \
+    --yesno "Summary: \n\
+    zfs_arc_min: $ZFS_ARC_MIN_MEGABYTES MB\n\
+    zfs_arc_max: $ZFS_ARC_MAX_MEGABYTES MB\n\
+    swappiness: $SWAPPINESS %\n\
+    locales: $locales\n\
+    repository: $repo_selection \n\
+    subscription: $(pvesubscription get | grep status | cut -d' ' -f2)\n\
+    suppress subscription warning: $suppress_warning" 30 76 
+}
+
 source /etc/os-release
 
 # Calculate and suggest values for ZFS L1ARC cache
@@ -402,5 +417,7 @@ select_pve_repos
 
 # subscription related actions
 select_subscription
+
+summary
 
 echo "Proxmox postinstallation finished!"
