@@ -148,7 +148,39 @@ auto_snapshot(){
     done
 }
 
-select_pve_repos() {
+check_subscription(){
+    serverid=$(pvesh get nodes/px1/subscription --output-format yaml | grep serverid | cut -d' ' -f2)
+    sub_status=$(pvesh get nodes/px1/subscription --output-format yaml | grep status | cut -d' ' -f2)
+    if [[ $sub_status == "notfound" ]]; then
+        if [[ $repo_selection == "pve-enterprise" ]]; then
+            if whiptail --title "NO PROXMOX SUBSCRIPTION FOUND" \
+            --backtitle $PROG \
+            --yes-button "ADD" \
+            --no-button "SKIP" \
+            --yesno "Server ID: $serverid\nDo you want to add a subscription key?" 17 76 ; then
+                add_subscription
+            fi
+        else
+            if whiptail --title "NO PROXMOX SUBSCRIPTION FOUND" \
+            --backtitle $PROG \
+            --yes-button "SUPPRESS WARNING" \
+            --no-button "SKIP" \
+            --yesno "Do you want to suppress the no subscription warning in WebGUI?" 17 76 ; then
+                suppress_no_subscription_warning
+            fi
+        fi
+    fi
+}
+
+add_subscription(){
+
+}
+
+suppress_no_subscription_warning(){
+
+}
+
+select_pve_repos(){
     pveenterprise=OFF
     pvenosubscription=OFF
     pvetest=OFF
@@ -164,13 +196,15 @@ select_pve_repos() {
                 else
                     pveenterprise=ON
                 fi 
+            fi
         fi
     fi
-    whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+    repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
     --radiolist "Choose Proxmox VE repository" 20 76 4 \
     "pve-enterprise" "Proxmox VE Enterprise repository" "$pveenterprise" \
     "pve-no-subscription" "Proxmox VE No Subscription repository" "$pvenosubscription" \
-    "pvetest" "Proxmox VE Testing repository" "$pvetest"
+    "pvetest" "Proxmox VE Testing repository" "$pvetest" 3>&1 1>&2 2>&3)
+
 
 }
 
@@ -187,3 +221,6 @@ auto_snapshot
 
 # Select proxmox repository
 select_pve_repos
+
+# subscription related actions
+select_subscription
