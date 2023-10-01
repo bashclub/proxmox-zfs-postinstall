@@ -47,8 +47,8 @@ ARC_MIN_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_min)
 ARC_MAX_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_max)
 
 # calculate suggested l1arc sice
-ZFS_ARC_MIN_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
-ZFS_ARC_MAX_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
+ZFS_ARC_MIN_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
+ZFS_ARC_MAX_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
 
 echo -e "######## CONFIGURE ZFS L1ARC SIZE ########\n"
 echo "System Summary:"
