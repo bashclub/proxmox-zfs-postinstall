@@ -3,22 +3,23 @@
 # This script configures basic settings and install standard tools on your Proxmox VE Server with ZFS storage
 # 
 # Features:
-# - Configure ZFS ARC Cache
-# - Configure vm.swappiness
-# - Install and configure zfs-auto-snapshot
-# - Switch pve-enterprise/pve-no-subscription repo
-# - Disable "No subscription message" in webinterface in no-subscription mode
-# - Add pve-enterprise subscription key
-# - Configure ceph repo 
-# - Update system to the latest version
-# - Install common tools
-# - Install Proxmox SDN Extensions
-# - Configure automatic backup of /etc Folder
-# - Configure locales
-# - SSH server hardening
+# + Configure ZFS ARC Cache
+# + Configure vm.swappiness
+# + Install and configure zfs-auto-snapshot
+# + Switch pve-enterprise/pve-no-subscription/pvetest repo
+# + Disable "No subscription message" in webinterface in no-subscription mode
+# + Add pve-enterprise subscription key
+# + Update system to the latest version
+# + Install common tools
+# + Install Proxmox SDN Extensions
+# + Configure automatic backup of /etc Folder
+# + Configure locales
+# + SSH server hardening
+# + Install checkzfs
+# + Install bashclub-zsync
+# - Create zfspool storage for swap disks if not exists
 # - Configure proxmox mail delivery with postfix
 # - Adjust default volblocksize for Proxmox zfspool storages
-# - Create zfspool storage for swap disks if not exists
 #
 #
 # Author: (C) 2023 Thorsten Spille <thorsten@bashclub.org>
@@ -385,6 +386,34 @@ set_default_volblocksize(){
     echo ""
 }
 
+install_checkzfs(){
+    wget -q --no-cache -O /usr/local/bin/checkzfs https://raw.githubusercontent.com/bashclub/check-zfs-replication/main/checkzfs.py
+    chmod +x /usr/local/bin/checkzfs
+    wget -q --no-cache -O /usr/local/bin/check-snapshot-age https://raw.githubusercontent.com/bashclub/check-zfs-replication/main/check-snapshot-age
+    chmod +x /usr/local/bin/check-snapshot-age
+}
+
+install_zsync(){
+    wget -q --no-cache -O /usr/bin/bashclub-zsync https://git.bashclub.org/bashclub/zsync/raw/branch/main/bashclub-zsync/usr/bin/bashclub-zsync
+    chmod +x /usr/bin/bashclub-zsync
+    bashclub-zsync
+    cat << EOF > /etc/logrotate.d/bashclub-zsync
+/var/log/bashclub-zsync/*.log {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+}
+EOF
+    mkdir -p /var/log/bashclub-zsync-example
+    cat << EOF > /etc/cron.d/bashclub-zsync
+#00 23 * * * root /usr/bin/bashclub-zsync -c /etc/bashclub/zsync.conf > /var/log/bashclub-zsync/zsync.log
+EOF
+}
+
 installation_task(){
     set_locales
     set_pve_repo
@@ -397,6 +426,8 @@ installation_task(){
     pve_conf_backup
     suppress_no_subscription_warning
     harden_ssh
+    install_checkzfs
+    install_zsync
     set_mail_delivery
     create_swap_pool
     set_default_volblocksize
