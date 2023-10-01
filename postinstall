@@ -183,6 +183,17 @@ ask_locales(){
     locales=$(whiptail --title "SET LOCALES" --backtitle "$PROG" --inputbox "Please enter a space separated list of locales to generate." 9 76 "$(echo $(grep -vE '#|^$' /etc/locale.gen | cut -d ' ' -f1))" 3>&1 1>&2 2>&3)
 }
 
+ask_ssh_hardening(){
+    ssh_hardening=0
+    if whiptail --title "HARDEN SSH SERVER" \
+    --backtitle "$PROG" \
+    --yes-button "HARDEN SSH SERVER" \
+    --no-button "SKIP" \
+    --yesno "Do you want to apply the SSH hardening profile?\nHost-Keys will be changed and root-Login with password will be disabled." 9 76 ; then
+        ssh_hardening=1
+    fi
+}
+
 input_subscription(){
     key=""
     cancel=0
@@ -384,7 +395,12 @@ installation_task(){
 }
 
 summary(){
-    whiptail --title "POSTINSTALL SUMMARY" \
+    autosnap=""
+    for interval in "${!auto_snap_keep[@]}"; do
+        autosnap="${interval}=${auto_snap_keep[$interval]} ${autosnap}"
+    done
+
+    if whiptail --title "POSTINSTALL SUMMARY" \
     --backtitle $PROG \
     --yes-button "INSTALL" \
     --no-button "ABORT & EXIT" \
@@ -395,7 +411,14 @@ summary(){
     locales: $locales\n\
     repository: $repo_selection \n\
     subscription: $(pvesubscription get | grep status | cut -d' ' -f2)\n\
-    suppress subscription warning: $suppress_warning" 30 76 
+    suppress subscription warning: $suppress_warning\n\
+    auto-snapshot: $autosnap\n\
+    ssh-hardening: $ssh_hardening\n\
+    " 30 76 ; then
+        installation_task
+    else
+        cancel_dialog
+    fi
 }
 
 source /etc/os-release
@@ -408,6 +431,9 @@ vm_swappiness
 
 # Ask for additional locales 
 ask_locales
+
+# Ask for ssh hardening
+ask_ssh_hardening
 
 # Configure count per interval of zfs-auto-snapshot
 auto_snapshot
