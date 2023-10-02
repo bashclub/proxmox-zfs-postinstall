@@ -19,7 +19,6 @@
 # + Install bashclub-zsync
 # + Create zfspool storage for swap disks if not exists
 # + Adjust default volblocksize for Proxmox zfspool storages
-# - Configure swap file
 # - Configure proxmox mail delivery with postfix
 #
 #
@@ -360,23 +359,77 @@ pve_conf_backup(){
 }
 
 harden_ssh(){
-    rm /etc/ssh/ssh_host_*
-    ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ""
-    ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ""
-    awk '$5 >= 3071' /etc/ssh/moduli > /etc/ssh/moduli.safe
-    mv /etc/ssh/moduli.safe /etc/ssh/moduli
+    if [ $ssh_hardening -gt 0 ]; then
+        rm /etc/ssh/ssh_host_*
+        ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ""
+        ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ""
+        awk '$5 >= 3071' /etc/ssh/moduli > /etc/ssh/moduli.safe
+        mv /etc/ssh/moduli.safe /etc/ssh/moduli
 
-    if [[ $VERSION_CODENAME == "bookworm" ]]; then
-        echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,gss-curve25519-sha256-,diffie-hellman-group16-sha512,gss-group16-sha512-,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
-    elif [[ $VERSION_CODENAME == "bullseye" ]]; then
-        sed -i 's/^\#HostKey \/etc\/ssh\/ssh_host_\(rsa\|ed25519\)_key$/HostKey \/etc\/ssh\/ssh_host_\1_key/g' /etc/ssh/sshd_config
-        echo -e echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-512,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
+        if [[ $VERSION_CODENAME == "bookworm" ]]; then
+            echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,gss-curve25519-sha256-,diffie-hellman-group16-sha512,gss-group16-sha512-,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
+        elif [[ $VERSION_CODENAME == "bullseye" ]]; then
+            sed -i 's/^\#HostKey \/etc\/ssh\/ssh_host_\(rsa\|ed25519\)_key$/HostKey \/etc\/ssh\/ssh_host_\1_key/g' /etc/ssh/sshd_config
+            echo -e echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-512,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
+        fi
+        systemctl restart ssh.service
     fi
-    systemctl restart ssh.service
 }
 
 set_mail_delivery(){
-    echo ""
+    cat << EOF > /etc/postfix/main.cf
+myhostname=$(hostname -f)
+smtpd_banner = \$myhostname ESMTP \$mail_name (Debian/GNU)
+biff = no
+append_dot_mydomain = no
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+mydestination = \$myhostname, localhost.\$mydomain, localhost
+mynetworks = 127.0.0.0/8
+inet_interfaces = loopback-only
+recipient_delimiter = +
+compatibility_level = 2
+
+#### sasl extension
+relayhost = [$smtphost]:$smtpport
+smtp_tls_CAfile = /etc/postfix/cacert.pem
+smtp_use_tls = yes
+sender_canonical_classes = envelope_sender, header_sender
+sender_canonical_maps =  regexp:/etc/postfix/sender_canonical_maps
+smtp_header_checks = regexp:/etc/postfix/header_check
+EOF
+
+    cat << EOF > /etc/postfix/header_check
+/From:.*/ REPLACE From: $displayname <$senderaddress>
+EOF
+
+    cat << EOF > /etc/postfix/sender_canonical_maps
+/.+/    $displayname <$senderaddress>
+EOF
+
+    if [ $smtpauth -gt 0 ]; then
+        cat << EOF > /etc/postfix/sasl_passwd
+[$smtphost]:$smtpport $username:$password
+EOF
+        postmap /etc/postfix/sasl_passwd
+        postmap /etc/aliases
+        chown root:root /etc/postfix/sasl_passwd
+        chown root:root /etc/postfix/sasl_passwd.db
+        chmod 0600 /etc/postfix/sasl_passwd
+        chmod 0600 /etc/postfix/sasl_passwd.db
+
+        cat << EOF >> /etc/postfix/main.cf
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+EOF
+    fi
+
+    ln -sf /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/postfix/cacert.pem 
+
+    systemctl restart postfix.service
+
+    pvesh set access/users/root@pam -email $recipientaddress
 }
 
 create_swap_pool(){
