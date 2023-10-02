@@ -181,7 +181,7 @@ select_subscription(){
 }
 
 ask_locales(){
-    locales=$(whiptail --title "SET LOCALES" --backtitle "$PROG" --inputbox "Please enter a space separated list of locales to generate." 9 76 "$(echo $(grep -vE '#|^$' /etc/locale.gen | cut -d ' ' -f1))" 3>&1 1>&2 2>&3)
+    if ! locales=$(whiptail --title "SET LOCALES" --backtitle "$PROG" --inputbox "Please enter a space separated list of locales to generate." 9 76 "$(echo $(grep -vE '#|^$' /etc/locale.gen | cut -d ' ' -f1))" 3>&1 1>&2 2>&3); then cancel_dialog ; fi
 }
 
 ask_ssh_hardening(){
@@ -379,16 +379,22 @@ harden_ssh(){
 ask_mail_config(){
     mailconfig=0
     smtpauth=0
+    senderaddress=""
+    displayname=""
+    recipientaddress=""
+    smtphost=""
+    smtpport=25
+    username=""
     if whiptail --title "MAIL DELIVERY" \
     --backtitle "$PROG" \
     --yes-button "MAIL CONFIG" \
     --no-button "SKIP" \
     --yesno "Do you want to configure postfix with a smarthost?" 9 76 ; then
         mailconfig=1
-        senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 3>&1 1>&2 2>&3)
-        displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 3>&1 1>&2 2>&3)
-        recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 3>&1 1>&2 2>&3)
-        smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 3>&1 1>&2 2>&3)
+        if ! senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if !recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
         smtpport=$(inputbox_int 'MAIL DELIVERY' 'Please enter the port of your smarthost' 7 25)
         if whiptail --title "MAIL DELIVERY" \
         --backtitle "$PROG" \
@@ -396,8 +402,8 @@ ask_mail_config(){
         --no-button "SKIP" \
         --yesno "Do you want to configure authentication against your smarthost?" 9 76 ; then
             smtpauth=1
-            username=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the username for authentication." 9 76 3>&1 1>&2 2>&3)
-            password=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --passwordbox "Please enter the passsword for authentication." 9 76 3>&1 1>&2 2>&3)
+            if ! username=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the username for authentication." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
+            if ! password=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --passwordbox "Please enter the passsword for authentication." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
         fi
     fi
 }
@@ -548,6 +554,14 @@ summary(){
     suppress subscription warning: $suppress_warning\n\
     auto-snapshot: $autosnap\n\
     ssh-hardening: $ssh_hardening\n\
+    mail delivery: $mailconfig
+    sender email: $senderaddress
+    sender display name: $displayname
+    notification address: $recipientaddress
+    smarthost: $smtphost
+    smarthost port: $smtpport
+    smarthost auth: $smtpauth
+    smarthost username: $username
     " 30 76 ; then
         installation_task
     else
