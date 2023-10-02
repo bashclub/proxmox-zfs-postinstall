@@ -493,7 +493,6 @@ install_checkzfs(){
 install_zsync(){
     wget -q --no-cache -O /usr/bin/bashclub-zsync https://git.bashclub.org/bashclub/zsync/raw/branch/main/bashclub-zsync/usr/bin/bashclub-zsync
     chmod +x /usr/bin/bashclub-zsync
-    bashclub-zsync
     cat << EOF > /etc/logrotate.d/bashclub-zsync
 /var/log/bashclub-zsync/*.log {
     weekly
