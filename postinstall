@@ -382,7 +382,7 @@ ask_mail_config(){
     senderaddress=""
     displayname=""
     recipientaddress=""
-    smtphost=""
+    smtphost=$(grep relayhost /etc/postfix/main.cf | cut -d : -f1 | cut -d ' ' -f3 | cut -d ']' -f1 | cut -d '[' -f2)
     smtpport=25
     username=""
     if whiptail --title "MAIL DELIVERY" \
@@ -392,10 +392,10 @@ ask_mail_config(){
     --yesno "Do you want to configure postfix with a smarthost?" 9 76 ; then
         mailconfig=1
         if ! senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        if ! displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        if !recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        smtpport=$(inputbox_int 'MAIL DELIVERY' 'Please enter the port of your smarthost' 7 25)
+        if ! displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 $(hostname -f) 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 $(pvesh get access/users/root@pam --output-format yaml| grep email | cut -d' ' -f2) 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 $smtphost 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        smtpport=$(inputbox_int 'MAIL DELIVERY' 'Please enter the port of your smarthost' 7 $(grep relayhost /etc/postfix/main.cf | cut -d':' -f2))
         if whiptail --title "MAIL DELIVERY" \
         --backtitle "$PROG" \
         --yes-button "CONFIGURE AUTH" \
