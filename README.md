@@ -23,7 +23,7 @@ Following settings are made:
 Just download and execute the script, all settings are made interactively.
 ```
 wget -O ./postinstall --no-cache https://github.com/bashclub/proxmox-zfs-postinstall/raw/dev/postinstall
-./postinstall
+bash ./postinstall
 ```
 
 # Author
