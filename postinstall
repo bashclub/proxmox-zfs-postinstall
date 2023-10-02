@@ -376,8 +376,35 @@ harden_ssh(){
     fi
 }
 
+ask_mail_config(){
+    mailconfig=0
+    smtpauth=0
+    if whiptail --title "MAIL DELIVERY" \
+    --backtitle "$PROG" \
+    --yes-button "MAIL CONFIG" \
+    --no-button "SKIP" \
+    --yesno "Do you want to configure postfix with a smarthost?" 9 76 ; then
+        mailconfig=1
+        senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 3>&1 1>&2 2>&3)
+        displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 3>&1 1>&2 2>&3)
+        recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 3>&1 1>&2 2>&3)
+        smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 3>&1 1>&2 2>&3)
+        smtpport=$(inputbox_int 'MAIL DELIVERY' 'Please enter the port of your smarthost' 7 25)
+        if whiptail --title "MAIL DELIVERY" \
+        --backtitle "$PROG" \
+        --yes-button "CONFIGURE AUTH" \
+        --no-button "SKIP" \
+        --yesno "Do you want to configure authentication against your smarthost?" 9 76 ; then
+            smtpauth=1
+            username=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the username for authentication." 9 76 3>&1 1>&2 2>&3)
+            password=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --passwordbox "Please enter the passsword for authentication." 9 76 3>&1 1>&2 2>&3)
+        fi
+    fi
+}
+
 set_mail_delivery(){
-    cat << EOF > /etc/postfix/main.cf
+    if [ $mailconfig -gt 0 ]; then
+        cat << EOF > /etc/postfix/main.cf
 myhostname=$(hostname -f)
 smtpd_banner = \$myhostname ESMTP \$mail_name (Debian/GNU)
 biff = no
@@ -399,37 +426,38 @@ sender_canonical_maps =  regexp:/etc/postfix/sender_canonical_maps
 smtp_header_checks = regexp:/etc/postfix/header_check
 EOF
 
-    cat << EOF > /etc/postfix/header_check
+        cat << EOF > /etc/postfix/header_check
 /From:.*/ REPLACE From: $displayname <$senderaddress>
 EOF
 
-    cat << EOF > /etc/postfix/sender_canonical_maps
+        cat << EOF > /etc/postfix/sender_canonical_maps
 /.+/    $displayname <$senderaddress>
 EOF
 
-    if [ $smtpauth -gt 0 ]; then
-        cat << EOF > /etc/postfix/sasl_passwd
+        if [ $smtpauth -gt 0 ]; then
+            cat << EOF > /etc/postfix/sasl_passwd
 [$smtphost]:$smtpport $username:$password
 EOF
-        postmap /etc/postfix/sasl_passwd
-        postmap /etc/aliases
-        chown root:root /etc/postfix/sasl_passwd
-        chown root:root /etc/postfix/sasl_passwd.db
-        chmod 0600 /etc/postfix/sasl_passwd
-        chmod 0600 /etc/postfix/sasl_passwd.db
+            postmap /etc/postfix/sasl_passwd
+            postmap /etc/aliases
+            chown root:root /etc/postfix/sasl_passwd
+            chown root:root /etc/postfix/sasl_passwd.db
+            chmod 0600 /etc/postfix/sasl_passwd
+            chmod 0600 /etc/postfix/sasl_passwd.db
 
-        cat << EOF >> /etc/postfix/main.cf
+            cat << EOF >> /etc/postfix/main.cf
 smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
 EOF
+        fi
+
+        ln -sf /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/postfix/cacert.pem 
+
+        systemctl restart postfix.service
+
+        pvesh set access/users/root@pam -email $recipientaddress
     fi
-
-    ln -sf /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/postfix/cacert.pem 
-
-    systemctl restart postfix.service
-
-    pvesh set access/users/root@pam -email $recipientaddress
 }
 
 create_swap_pool(){
@@ -549,6 +577,9 @@ select_pve_repos
 
 # subscription related actions
 select_subscription
+
+# mail delivery config
+ask_mail_config
 
 summary
 
