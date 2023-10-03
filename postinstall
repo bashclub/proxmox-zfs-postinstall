@@ -131,8 +131,8 @@ Suggested values: \n \
 }
 
 arc_set_manual() {
-    if [ $ARC_MIN_CURRENT_MB -gt 0 ]; then MIN_VALUE=$ARC_MIN_CURRENT_MB; else $ZFS_ARC_MIN_MEGABYTES; fi
-    if [ $ARC_MAX_CURRENT_MB -gt 0 ]; then MAX_VALUE=$ARC_MAX_CURRENT_MB; else $ZFS_ARC_MAX_MEGABYTES; fi
+    if [ $ARC_MIN_CURRENT_MB -gt 0 ]; then MIN_VALUE=$ARC_MIN_CURRENT_MB; else MIN_VALUE=$ZFS_ARC_MIN_MEGABYTES; fi
+    if [ $ARC_MAX_CURRENT_MB -gt 0 ]; then MAX_VALUE=$ARC_MAX_CURRENT_MB; else MAX_VALUE=$ZFS_ARC_MAX_MEGABYTES; fi
 
     if ! ZFS_ARC_MIN_MEGABYTES=$(inputbox_int 'CONFIGURE ZFS L1ARC MIN SIZE' 'Please enter zfs_arc_min in MB' 7 $MIN_VALUE) ; then cancel_dialog ; fi
     if ! ZFS_ARC_MAX_MEGABYTES=$(inputbox_int 'CONFIGURE ZFS L1ARC MAX SIZE' 'Please enter zfs_arc_max in MB' 7 $MAX_VALUE) ; then cancel_dialog ; fi
