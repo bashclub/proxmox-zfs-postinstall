@@ -275,27 +275,35 @@ set_pve_repo(){
     enterprise=$(grep pve-enterprise /etc/apt/sources.list.d/pve-enterprise.list)
     test=$(grep pvetest /etc/apt/sources.list)
     if [[ $repo_selection == "pve-enterprise" ]]; then
-        pvesh set nodes/px1/apt/repositories --handle enterprise
-        if [[ $nosub != "" ]]; then
+        echo "deb https://enterprise.proxmox.com/debian/pve $VERSION_CODENAME pve-enterprise" > /etc/apt/sources.list.d/pve-enterprise.list
+        if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
             sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
         fi
-        if [[ $test != "" ]]; then
+        if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
             sed -i "s|$test|# $test|g" /etc/apt/sources.list
         fi
     elif [[ $repo_selection == "pve-no-subscription" ]]; then
-        pvesh set nodes/px1/apt/repositories --handle no-subscription
-        if [[ $enterprise != "" ]]; then
-            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+        if [[ $nosub == "" ]]; then
+            echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription\n" >> /etc/apt/sources.list
+        elif [[ $nosub == *"#"* ]]; then
+            sed -i "s|$nosub|$(echo $nosub | cut -d' ' -f2-)|" /etc/apt/sources.list
         fi
-        if [[ $test != "" ]]; then
+        if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
+            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list 
+        fi
+        if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
             sed -i "s|$test|# $test|g" /etc/apt/sources.list
         fi
     elif [[ $repo_selection == "pvetest" ]]; then
-        pvesh set nodes/px1/apt/repositories --handle test
-        if [[ $nosub != "" ]]; then
+        if [[ $test == "" ]]; then
+            echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pvetest\n" >> /etc/apt/sources.list
+        elif [[ $test == *"#"* ]]; then
+            sed -i "s|$test|$(echo $test | cut -d' ' -f2-)|" /etc/apt/sources.list
+        fi
+        if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
             sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
         fi
-        if [[ $enterprise != "" ]]; then
+        if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
             sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
         fi
     fi
