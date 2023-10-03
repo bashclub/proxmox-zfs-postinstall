@@ -264,7 +264,7 @@ set_locales(){
     for locale in $locales; do
         line=$(grep $locale /etc/locale.gen)
         if echo $line | grep "#" ; then
-            sed -i "s/$line/$(echo $line | cut -d' ' -f2-)" /etc/locale.gen
+            sed -i "s/$line/$(echo $line | cut -d' ' -f2-)/" /etc/locale.gen
         fi
     done
     locale-gen
@@ -276,16 +276,28 @@ set_pve_repo(){
     test=$(grep pvetest /etc/apt/sources.list)
     if [[ $repo_selection == "pve-enterprise" ]]; then
         pvesh set nodes/px1/apt/repositories --handle enterprise
-        sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
-        sed -i "s|$test|# $test|g" /etc/apt/sources.list
+        if [[ $nosub != "" ]]; then
+            sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+        fi
+        if [[ $test != "" ]]; then
+            sed -i "s|$test|# $test|g" /etc/apt/sources.list
+        fi
     elif [[ $repo_selection == "pve-no-subscription" ]]; then
         pvesh set nodes/px1/apt/repositories --handle no-subscription
-        sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
-        sed -i "s|$test|# $test|g" /etc/apt/sources.list
+        if [[ $enterprise != "" ]]; then
+            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+        fi
+        if [[ $test != "" ]]; then
+            sed -i "s|$test|# $test|g" /etc/apt/sources.list
+        fi
     elif [[ $repo_selection == "pvetest" ]]; then
         pvesh set nodes/px1/apt/repositories --handle test
-        sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
-        sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+        if [[ $nosub != "" ]]; then
+            sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+        fi
+        if [[ $enterprise != "" ]]; then
+            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+        fi
     fi
 }
 
