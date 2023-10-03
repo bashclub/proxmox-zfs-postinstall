@@ -489,7 +489,7 @@ EOF
 create_swap_pool(){
     if ! pvesm status | grep swap; then
         if ! zfs list rpool/swap > /dev/null 2>&1 ; then
-            zfs create -O com.sun:auto-snapshot=false rpool/swap
+            zfs create -o com.sun:auto-snapshot=false rpool/swap
         else
             zfs set com.sun:auto-snapshot=false rpool/swap
         fi
