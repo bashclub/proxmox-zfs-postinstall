@@ -224,7 +224,7 @@ suppress_no_subscription_warning(){
         if [ -f /opt/bashclub/no-sub-hack.sh ] ; then rm -r /opt/bashclub ; fi
         if [ -f /etc/apt/apt.conf.d/80bashclubapthook ] ; then rm /etc/apt/apt.conf.d/80bashclubapthook ; fi
 
-        wget --no-cache -O /usr/local/bin/suppress_no_subscription_warning https://github.com/bashclub/no-sub-hack/raw/main/no-sub-hack.sh
+        wget -q --no-cache -O /usr/local/bin/suppress_no_subscription_warning https://github.com/bashclub/no-sub-hack/raw/main/no-sub-hack.sh
         chmod +x /usr/local/bin/suppress_no_subscription_warning
         /usr/local/bin/suppress_no_subscription_warning
         cat << EOF > /etc/apt/apt.conf.d/80-suppress_no_subscription_warning
