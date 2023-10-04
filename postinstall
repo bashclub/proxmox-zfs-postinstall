@@ -69,6 +69,10 @@ sub_status=$(pvesubscription get | grep status | cut -d' ' -f2)
 
 #### FUNCTIONS ####
 
+log(){
+    echo "$(date) $1"
+}
+
 roundup(){
     echo $(((($1 + $ROUND_FACTOR) / $ROUND_FACTOR) * $ROUND_FACTOR))
 }
@@ -211,6 +215,7 @@ input_subscription(){
 }
 
 set_subscription(){
+    log "Setting subscription key $1"
     if ! pvesubscription set $1; then
         input_subscription
     elif [[ $(pvesubscription get | grep status | cut -d' ' -f2) == "invalid" ]]; then
@@ -261,6 +266,7 @@ select_pve_repos(){
 }
 
 set_locales(){
+    log "Setting locales"
     for locale in $locales; do
         line=$(grep $locale /etc/locale.gen)
         if echo $line | grep "#" ; then
@@ -271,6 +277,7 @@ set_locales(){
 }
 
 set_pve_repo(){
+    log "Setting Proxmox package repositories to $repo_selection"
     nosub=$(grep pve-no-subscription /etc/apt/sources.list)
     enterprise=$(grep pve-enterprise /etc/apt/sources.list.d/pve-enterprise.list)
     test=$(grep pvetest /etc/apt/sources.list)
@@ -310,19 +317,19 @@ set_pve_repo(){
 }
 
 update_system(){
-    echo "Getting latest package lists"
+    log "Downloading latest package lists"
     apt update > /dev/null 2>&1
-    echo "Upgrading system to latest version - Depending on your version this could take a while..."
+    log "Upgrading system to latest version - Depending on your version this could take a while..."
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade > /dev/null 2>&1
 }
 
 install_tools(){
-    echo "Installing toolset - Depending on your version this could take a while..."
+    log "Installing toolset - Depending on your version this could take a while..."
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $REQUIRED_TOOLS $OPTIONAL_TOOLS > /dev/null 2>&1
 }
 
 enable_sdn(){
-    # include interfaces.d to enable SDN features
+    log "Enabling SDN features"
     q=$(cat /etc/network/interfaces | grep "source /etc/network/interfaces.d/*")
     if [ $? -gt 0 ]; then
         echo "source /etc/network/interfaces.d/*" >> /etc/network/interfaces
@@ -330,9 +337,9 @@ enable_sdn(){
 }
 
 set_arc_cache(){
+    log "Adjusting ZFS level 1 arc (Min: $ZFS_ARC_MIN_MEGABYTES, Max: $ZFS_ARC_MAX_MEGABYTES)"
     ZFS_ARC_MIN_BYTES=$((ZFS_ARC_MIN_MEGABYTES * 1024 *1024))
     ZFS_ARC_MAX_BYTES=$((ZFS_ARC_MAX_MEGABYTES * 1024 *1024))
-    echo "Adjusting ZFS level 1 arc"
     echo $ZFS_ARC_MIN_BYTES > /sys/module/zfs/parameters/zfs_arc_min
     echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
     cat << EOF > /etc/modprobe.d/zfs.conf
@@ -344,7 +351,7 @@ EOF
 set_auto_snapshot(){
     # configure zfs-auto-snapshot
     for interval in "${!auto_snap_keep[@]}"; do
-        echo "Setting zfs-auto-snapshot retention: $interval = ${auto_snap_keep[$interval]}"
+        log "Setting zfs-auto-snapshot retention: $interval = ${auto_snap_keep[$interval]}"
         if [[ "$interval" == "frequent" ]]; then
             CURRENT=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
             if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
@@ -360,14 +367,13 @@ set_auto_snapshot(){
 }
 
 set_swappiness(){
-    echo "Configuring swappiness"
+    log "Setting swappiness to $SWAPPINESS %"
     echo "vm.swappiness=$SWAPPINESS" > /etc/sysctl.d/swappiness.conf
-    sysctl -w vm.swappiness=$SWAPPINESS
+    sysctl -w vm.swappiness=$SWAPPINESS > /dev/null
 }
 
 pve_conf_backup(){
-    echo "Configuring pve-conf-backup"
-    # create backup jobs of /etc
+    log "Configuring pve-conf-backup"
     zfs list $PVE_CONF_BACKUP_TARGET > /dev/null 2>&1
     if [ $? -ne 0 ]; then
         zfs create $PVE_CONF_BACKUP_TARGET
@@ -380,6 +386,7 @@ pve_conf_backup(){
 
 harden_ssh(){
     if [ $ssh_hardening -gt 0 ]; then
+        log "Hardening ssh server"
         rm /etc/ssh/ssh_host_*
         ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ""
         ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ""
@@ -430,6 +437,7 @@ ask_mail_config(){
 
 set_mail_delivery(){
     if [ $mailconfig -gt 0 ]; then
+        log "Configuring mail delivery"
         cat << EOF > /etc/postfix/main.cf
 myhostname=$(hostname -f)
 smtpd_banner = \$myhostname ESMTP \$mail_name (Debian/GNU)
@@ -487,6 +495,7 @@ EOF
 }
 
 create_swap_pool(){
+    log "Configuring swap storage"
     if ! pvesm status | grep swap > /dev/null; then
         if ! zfs list rpool/swap > /dev/null 2>&1 ; then
             zfs create -o com.sun:auto-snapshot=false rpool/swap
@@ -498,19 +507,23 @@ create_swap_pool(){
 }
 
 set_default_volblocksize(){
+    log "Setting default volblocksize=16k to all zfspool storages"
     for storage in $(pvesm status | grep zfspool | cut -d' ' -f1); do
         pvesm set $storage --blocksize 16k
     done
 }
 
 install_checkzfs(){
+    log "Installing checkzfs to /usr/local/bin/checkzfs"
     wget -q --no-cache -O /usr/local/bin/checkzfs https://raw.githubusercontent.com/bashclub/check-zfs-replication/main/checkzfs.py
     chmod +x /usr/local/bin/checkzfs
+    log "Installing check-snapshot-age to /usr/local/bin/check-snapshot-age"
     wget -q --no-cache -O /usr/local/bin/check-snapshot-age https://raw.githubusercontent.com/bashclub/check-zfs-replication/main/check-snapshot-age
     chmod +x /usr/local/bin/check-snapshot-age
 }
 
 install_zsync(){
+    log "Installing bashclub-zsync"
     wget -q --no-cache -O /usr/bin/bashclub-zsync https://git.bashclub.org/bashclub/zsync/raw/branch/main/bashclub-zsync/usr/bin/bashclub-zsync
     chmod +x /usr/bin/bashclub-zsync
     cat << EOF > /etc/logrotate.d/bashclub-zsync
@@ -531,6 +544,8 @@ EOF
 }
 
 installation_task(){
+    log "Starting Installation"
+
     set_locales
     set_pve_repo
     update_system
@@ -548,7 +563,7 @@ installation_task(){
     create_swap_pool
     set_default_volblocksize
 
-    echo "Updating initramfs - This will take some time..."
+    log "Updating initramfs - This will take some time..."
     update-initramfs -u -k all > /dev/null 2>&1
 
 }
