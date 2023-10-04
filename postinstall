@@ -67,6 +67,9 @@ declare -A auto_snap_keep=( ["frequent"]="12" ["hourly"]="96" ["daily"]="14" ["w
 serverid=$(pvesubscription get | grep serverid | cut -d' ' -f2)
 sub_status=$(pvesubscription get | grep status | cut -d' ' -f2)
 
+# get notification address
+recipientaddress=$(pvesh get access/users/root@pam --output-format yaml| grep email | cut -d' ' -f2)
+
 #### FUNCTIONS ####
 
 log(){
@@ -422,7 +425,6 @@ ask_mail_config(){
         senderaddress=$(grep "@" -m1 /etc/postfix/sender_canonical_maps | cut -d '<' -f2 | cut -d '>' -f1)
         displayname=$(grep "@" -m1 /etc/postfix/sender_canonical_maps | cut -d' ' -f5)
     fi
-    recipientaddress=""
     smtphost=$(grep relayhost /etc/postfix/main.cf | cut -d : -f1 | cut -d ' ' -f3 | cut -d ']' -f1 | cut -d '[' -f2)
     smtpport=$(grep relayhost /etc/postfix/main.cf | cut -d':' -f2)
     if [[ $smtpport == "" ]] || [[ $smtpport == "relayhost" ]]; then
@@ -443,7 +445,7 @@ ask_mail_config(){
     --yesno "Do you want to configure postfix with a smarthost?" 9 76 ; then
         mailconfig=1
         if ! displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 $(hostname -f) 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        if ! recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 $(pvesh get access/users/root@pam --output-format yaml| grep email | cut -d' ' -f2) 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 $recipientaddress 3>&1 1>&2 2>&3); then cancel_dialog; fi
         if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 $smtphost 3>&1 1>&2 2>&3); then cancel_dialog; fi
         smtpport=$(inputbox_int 'MAIL DELIVERY' 'Please enter the port of your smarthost' 7 $smtpport)
         if ! senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 $senderaddress 3>&1 1>&2 2>&3); then cancel_dialog; fi
