@@ -111,7 +111,7 @@ cancel_dialog() {
 
 arc_suggestion(){
     if [ $ARC_MIN_DEFAULT_BYTES -lt 33554432 ]; then ARC_MIN_DEFAULT_MB="32" ; else ARC_MIN_DEFAULT_MB="$(($ARC_MIN_DEFAULT_BYTES / 1024 / 1024))" ; fi
-    
+
     ZFS_ARC_MAX_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
     ZFS_ARC_MIN_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
     if [ $ZFS_ARC_MIN_MEGABYTES -eq 0 ]; then
@@ -479,8 +479,8 @@ EOF
             cat << EOF > /etc/postfix/sasl_passwd
 [$smtphost]:$smtpport $username:$password
 EOF
-            postmap /etc/postfix/sasl_passwd
-            postmap /etc/aliases
+            postmap /etc/postfix/sasl_passwd > /dev/null 2>&1
+            postmap /etc/aliases > /dev/null 2>&1
             chown root:root /etc/postfix/sasl_passwd
             chown root:root /etc/postfix/sasl_passwd.db
             chmod 0600 /etc/postfix/sasl_passwd
