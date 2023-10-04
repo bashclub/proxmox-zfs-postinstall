@@ -280,7 +280,7 @@ set_locales(){
             sed -i "s/$line/$(echo $line | cut -d' ' -f2-)/" /etc/locale.gen
         fi
     done
-    locale-gen
+    locale-gen > /dev/null 2>&1
 }
 
 set_pve_repo(){
@@ -641,4 +641,4 @@ ask_mail_config
 
 summary
 
-echo "Proxmox postinstallation finished!"
+log "Proxmox postinstallation finished!"
