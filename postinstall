@@ -110,6 +110,8 @@ cancel_dialog() {
 }
 
 arc_suggestion(){
+    if [ $ARC_MIN_DEFAULT_BYTES -lt 33554432 ]; then ARC_MIN_DEFAULT_MB="32" ; else ARC_MIN_DEFAULT_MB="$(($ARC_MIN_DEFAULT_BYTES / 1024 / 1024))" ; fi
+    
     ZFS_ARC_MAX_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
     ZFS_ARC_MIN_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
     if [ $ZFS_ARC_MIN_MEGABYTES -eq 0 ]; then
@@ -119,7 +121,6 @@ arc_suggestion(){
         fi
     fi
 
-    if [ $ARC_MIN_DEFAULT_BYTES -lt 33554432 ]; then ARC_MIN_DEFAULT_MB="32" ; else ARC_MIN_DEFAULT_MB="$(($ARC_MIN_DEFAULT_BYTES / 1024 / 1024))" ; fi
     if [ $ARC_MIN_CUR_BYTES -gt 0 ]; then ARC_MIN_CURRENT_MB="$(($ARC_MIN_CUR_BYTES / 1024 / 1024))" ; else ARC_MIN_CURRENT_MB="0" ; fi
     if [ $ARC_MAX_CUR_BYTES -gt 0 ]; then ARC_MAX_CURRENT_MB="$(($ARC_MAX_CUR_BYTES / 1024 / 1024))" ; else ARC_MAX_CURRENT_MB="0" ; fi
 
