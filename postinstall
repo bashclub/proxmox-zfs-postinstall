@@ -19,7 +19,7 @@
 # + Install bashclub-zsync
 # + Create zfspool storage for swap disks if not exists
 # + Adjust default volblocksize for Proxmox zfspool storages
-# - Configure proxmox mail delivery with postfix
+# + Configure proxmox mail delivery with postfix
 #
 #
 # Author: (C) 2023 Thorsten Spille <thorsten@bashclub.org>
@@ -62,6 +62,9 @@ SWAPPINESS=$(cat /proc/sys/vm/swappiness)
 
 # zfs-auto-snapshot default values
 declare -A auto_snap_keep=( ["frequent"]="12" ["hourly"]="96" ["daily"]="14" ["weekly"]="6" ["monthly"]="3" )
+
+setblocksize=0
+volblocksize=16k
 
 # gather proxmox subscription info
 serverid=$(pvesubscription get | grep serverid | cut -d' ' -f2)
@@ -528,15 +531,28 @@ create_swap_pool(){
         else
             zfs set com.sun:auto-snapshot=false rpool/swap
         fi
-        pvesm add zfspool swap --blocksize 16k --content images,rootdir --pool rpool/swap
+        pvesm add zfspool swap --content images,rootdir --pool rpool/swap
+    fi
+}
+
+ask_volblocksize(){
+    if whiptail --title "SET DEFAULT BLOCKSIZE" \
+    --backtitle "$PROG" \
+    --yes-button "SET BLOCKSIZE" \
+    --no-button "SKIP" \
+    --yesno "Do you want to adjust the default blocksize on all zfspool storages?" 9 76 ; then
+        setblocksize=1
+        if ! volblocksize=$(whiptail  --title "SET DEFAULT BLOCKSIZE" --backtitle "$PROG" --inputbox "Please enter the desired blocksize for your zfspool storages." 9 76 $volblocksize 3>&1 1>&2 2>&3); then cancel_dialog; fi
     fi
 }
 
 set_default_volblocksize(){
-    log "Setting default volblocksize=16k to all zfspool storages"
-    for storage in $(pvesm status | grep zfspool | cut -d' ' -f1); do
-        pvesm set $storage --blocksize 16k
-    done
+    if [ $setblocksize -gt 0 ]; then
+        log "Setting default volblocksize=16k to all zfspool storages"
+        for storage in $(pvesm status | grep zfspool | cut -d' ' -f1); do
+            pvesm set $storage --blocksize $volblocksize
+        done
+    fi
 }
 
 install_checkzfs(){
@@ -622,6 +638,8 @@ summary(){
     smarthost port: $smtpport
     smarthost auth: $smtpauth
     smarthost username: $username
+    set blocksize: $setblocksize
+    volblocksize: $volblocksize
     " 30 76 ; then
         installation_task
     else
@@ -654,6 +672,9 @@ select_subscription
 
 # mail delivery config
 ask_mail_config
+
+# set volblocksize 
+ask_volblocksize
 
 summary
 
