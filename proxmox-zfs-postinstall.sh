@@ -94,6 +94,30 @@ if [[ "$(echo $RESULT | awk '{print tolower($0)}')" == "n" ]]; then
     fi
 fi
 
+#### Create Swapfile ####
+
+echo -e "######## Configure Swapfile ########\n"
+
+read -p "With the default PVE-root on ZFS installation, no swap is created. Do you want to create a swapfile/zfs swap volume dataset? (y/n)" swapfile_userinput_bool
+if [ $swapfile_userinput_bool -eq "y" ]; then
+    read -p "Name for the swap dataset? Leave empty to use default 'swap'" swapfile_userinput_name
+    if [ x$swapfile_userinput_name -eq "x" ]; then
+        swapfile_name = "swap";
+    else 
+        swapfile_name = $swapfile_userinput_name;
+    fi
+    read -p "Size for the swap volume in G, only numbers" swapfile_userinput_size
+    if echo "$swapfile_userinput_size" | grep -qE '^[0-9]+$'; then
+        swapfile_size = $swapfile_userinput_size;
+    else
+        echo "No valid input detected, falling back to 20G Swap Size";
+        swapfile_size = "20";
+    fi
+else
+    echo "No swapfile will be created"
+fi
+
+
 #### SWAPPINESS ####
 
 echo -e "######## CONFIGURE SWAPPINESS ########\n"
@@ -212,6 +236,19 @@ for interval in "${!auto_snap_keep[@]}"; do
         fi
     fi
 done
+
+
+if [ $swapfile_userinput_bool -eq "y" ]; then
+    echo "Creating swapfile"
+    zfs create -V ${swapfile_size}G -b $(getconf PAGESIZE) -o logbias=throughput -o sync=always -o primarycache=metadata -o com.sun:auto-snapshot=false rpool/$swapfile_name
+    echo "Formatting swapfile"
+    mkswap -f /dev/zvol/rpool/$swapfile_name
+    echo "Turning on swap"
+    swapon /dev/zvol/rpool/$swapfile_name
+    echo "Adding swapfile to fstab"
+    echo "/dev/zvol/rpool/$swapfile_name none swap discard 0 0" >> /etc/fstab
+fi
+
 
 echo "Configuring swappiness"
 echo "vm.swappiness=$SWAPPINESS" > /etc/sysctl.d/swappiness.conf
