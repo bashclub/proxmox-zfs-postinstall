@@ -17,6 +17,7 @@ Following settings are made:
 - Create zfspool storage for swap disks if not exists
 - Adjust default volblocksize for Proxmox zfspool storage
 - Configure proxmox mail delivery with postfix
+- Daily check (and download) for new stable virtio-win iso and prune old (unused) versions
 
 # Usage
 
