@@ -99,19 +99,19 @@ fi
 echo -e "######## Configure Swapfile ########\n"
 
 read -p "With the default PVE-root on ZFS installation, no swap is created. Do you want to create a swapfile/zfs swap volume dataset? (y/n)" swapfile_userinput_bool
-if [ $swapfile_userinput_bool -eq "y" ]; then
+if [ $swapfile_userinput_bool == "y" ]; then
     read -p "Name for the swap dataset? Leave empty to use default 'swap'" swapfile_userinput_name
-    if [ x$swapfile_userinput_name -eq "x" ]; then
-        swapfile_name = "swap";
+    if [ x$swapfile_userinput_name == "x" ]; then
+        swapfile_name="swap";
     else 
-        swapfile_name = $swapfile_userinput_name;
+        swapfile_name=$swapfile_userinput_name;
     fi
     read -p "Size for the swap volume in G, only numbers" swapfile_userinput_size
     if echo "$swapfile_userinput_size" | grep -qE '^[0-9]+$'; then
-        swapfile_size = $swapfile_userinput_size;
+        swapfile_size=$swapfile_userinput_size;
     else
         echo "No valid input detected, falling back to 20G Swap Size";
-        swapfile_size = "20";
+        swapfile_size="20";
     fi
 else
     echo "No swapfile will be created"
