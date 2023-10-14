@@ -238,7 +238,7 @@ for interval in "${!auto_snap_keep[@]}"; do
 done
 
 
-if [ $swapfile_userinput_bool -eq "y" ]; then
+if [ $swapfile_userinput_bool == "y" ]; then
     echo "Creating swapfile"
     zfs create -V ${swapfile_size}G -b $(getconf PAGESIZE) -o logbias=throughput -o sync=always -o primarycache=metadata -o com.sun:auto-snapshot=false rpool/$swapfile_name
     echo "Formatting swapfile"
