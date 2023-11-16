@@ -31,7 +31,7 @@ set -uo pipefail
 PROG=$(basename "$0")
 
 # Required tools for usage in postinstall
-REQUIRED_TOOLS="curl ifupdown2 git gron libsasl2-modules lsb-release libpve-network-perl postfix ssl-cert zfs-auto-snapshot"
+REQUIRED_TOOLS="curl ifupdown2 git gron ipmitool libsasl2-modules lsb-release libpve-network-perl postfix ssl-cert zfs-auto-snapshot"
 
 # Optional tools to install
 OPTIONAL_TOOLS="dnsutils ethtool htop iftop jq lshw lsscsi mc net-tools nvme-cli rpl screen smartmontools sudo sysstat tmux unzip vim"
