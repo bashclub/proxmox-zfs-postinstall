@@ -4,6 +4,7 @@ This script installs and configures basic tools for running a Proxmox Server.
 Following settings are made:
 - Install and configure zfs-auto-snapshot
 - Switch pve-enterprise/pve-no-subscription/pvetest repo
+- Switch ceph repo between quincy/reef and enterprise/no-subscription/test or remove it
 - Disable "No subscription message" in webinterface in no-subscription mode
 - Add pve-enterprise subscription key
 - Update system to the latest version
