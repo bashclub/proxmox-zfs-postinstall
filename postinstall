@@ -621,6 +621,17 @@ EOF
 #!/bin/bash
 /usr/local/bin/virtio-win-updater >> /var/log/virtio-win-updater.log 2>&1
 EOF
+    cat << EOF > /etc/logrotate.d/virtio-win-updater
+/var/log/virtio-win-updater.log {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+}
+EOF
     log "Running virtio-win-updater"
     virtio-win-updater
 }
