@@ -252,7 +252,7 @@ EOF
     fi
 }
 
-select_pve_repos(){
+select_pve_repo(){
     pveenterprise=OFF
     pvenosubscription=OFF
     pvetest=OFF
@@ -277,6 +277,43 @@ select_pve_repos(){
     "pve-no-subscription" "Proxmox VE No Subscription repository" "$pvenosubscription" \
     "pvetest" "Proxmox VE Testing repository" "$pvetest" 3>&1 1>&2 2>&3)
 
+}
+
+select_ceph_repo(){
+    none=OFF
+    quincyenterprise=OFF
+    quincynosubscription=OFF
+    quincytest=OFF
+    reefenterprise=OFF
+    reefnosubscription=OFF
+    reeftest=OFF
+    if [ -f /etc/apt/sources.list.d/ceph.list ]; then
+        if grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "enterprise" > /dev/null ; then
+            quincyenterprise=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "enterprise" > /dev/null ; then
+            reefenterprise=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "no-subscription" > /dev/null ; then
+            quincynosubscription=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "no-subscription" > /dev/null ; then
+            reefnosubscription=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "test" > /dev/null ; then
+            quincytest=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "test" > /dev/null ; then
+            reeftest=ON
+        else
+            none=ON
+        fi        
+    else
+        none=ON
+    fi
+    repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+    --radiolist "Choose Ceph repository" 20 76 4 \
+    "quincyenterprise" "Ceph Quincy Enterprise repository" "$quincyenterprise" \
+    "quincynosubscription" "Ceph Quincy No Subscription repository" "$quincynosubscription" \
+    "quincytest" "Ceph Quincy Testing repository" "$quincytest" \
+    "reefenterprise" "Ceph Reef Enterprise repository" "$reefenterprise" \
+    "reefnosubscription" "Ceph Reef No Subscription repository" "$reefnosubscription" \
+    "reeftest" "Ceph Reef Testing repository" "$reeftest" 3>&1 1>&2 2>&3)
 }
 
 set_locales(){
@@ -718,7 +755,10 @@ ask_ssh_hardening
 auto_snapshot
 
 # Select proxmox repository
-select_pve_repos
+select_pve_repo
+
+# Select Ceoh repository
+select_ceph_repo
 
 # subscription related actions
 select_subscription
