@@ -307,7 +307,8 @@ select_ceph_repo(){
         none=ON
     fi
     ceph_repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
-    --radiolist "Choose Ceph repository" 20 76 4 \
+    --radiolist "Choose Ceph repository" 20 76 7 \
+    "none" "No Ceph repository" "$none" \
     "quincyenterprise" "Ceph Quincy Enterprise repository" "$quincyenterprise" \
     "quincynosubscription" "Ceph Quincy No Subscription repository" "$quincynosubscription" \
     "quincytest" "Ceph Quincy Testing repository" "$quincytest" \
