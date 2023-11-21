@@ -528,9 +528,10 @@ create_swap_pool(){
     log "Configuring swap storage"
     if ! pvesm status | grep swap > /dev/null; then
         if ! zfs list rpool/swap > /dev/null 2>&1 ; then
-            zfs create -o com.sun:auto-snapshot=false rpool/swap
+            zfs create -o com.sun:auto-snapshot:frequent=false -o com.sun:auto-snapshot:hourly=false -o com.sun:auto-snapshot:daily=false -o com.sun:auto-snapshot:weekly=false -o com.sun:auto-snapshot:monthly=false rpool/swap
         else
-            zfs set com.sun:auto-snapshot=false rpool/swap
+            zfs set com.sun:auto-snapshot:frequent=false com.sun:auto-snapshot:hourly=false com.sun:auto-snapshot:daily=false com.sun:auto-snapshot:weekly=false com.sun:auto-snapshot:monthly=false rpool/swap
+            zfs inherit com.sun:auto-snapshot rpool/swap
         fi
         pvesm add zfspool swap --content images,rootdir --pool rpool/swap
     fi
@@ -580,7 +581,7 @@ install_zsync(){
     create 644 root root
 }
 EOF
-    mkdir -p /var/log/bashclub-zsync-example
+    mkdir -p /var/log/bashclub-zsync
     cat << EOF > /etc/cron.d/bashclub-zsync
 #00 23 * * * root /usr/bin/bashclub-zsync -c /etc/bashclub/zsync.conf > /var/log/bashclub-zsync/zsync.log
 EOF
@@ -616,7 +617,10 @@ else
 fi
 EOF
     chmod +x /usr/local/bin/virtio-win-updater
-    ln -sf /usr/local/bin/virtio-win-updater /etc/cron.daily/virtio-win-updater
+    cat << EOF > /etc/cron.daily/virtio-win-updater
+#!/bin/bash
+/usr/local/bin/virtio-win-updater >> /var/log/virtio-win-updater.log 2>&1
+EOF
     log "Running virtio-win-updater"
     virtio-win-updater
 }
