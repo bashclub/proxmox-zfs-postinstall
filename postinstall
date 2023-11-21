@@ -306,7 +306,7 @@ select_ceph_repo(){
     else
         none=ON
     fi
-    repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+    ceph_repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
     --radiolist "Choose Ceph repository" 20 76 4 \
     "quincyenterprise" "Ceph Quincy Enterprise repository" "$quincyenterprise" \
     "quincynosubscription" "Ceph Quincy No Subscription repository" "$quincynosubscription" \
@@ -325,6 +325,30 @@ set_locales(){
         fi
     done
     locale-gen > /dev/null 2>&1
+}
+
+set_ceph_repo(){
+    log "Setting Proxmox package repositories to $ceph_repo_selection"
+    if [[ "$ceph_repo_selection" != "none" ]]; then
+        if [[ "$ceph_repo_selection" == *"quincy"* ]]; then
+            generation=quincy
+        elif [[ "$ceph_repo_selection" == *"reef"* ]]; then
+            generation=reef
+        fi
+        if [[ "$ceph_repo_selection" == *"enterprise"* ]]; then
+            selection=enterprise
+            server=https://enterprise.proxmox.com
+        elif [[ "$ceph_repo_selection" == *"nosubscription"* ]]; then
+            selection=no-subscription
+            server=http://download.proxmox.com
+        elif [[ "$ceph_repo_selection" == *"test"* ]]; then
+            selection=test
+            server=http://download.proxmox.com
+        fi
+        echo "deb ${server}/debian/ceph-${generation} $(lsb_release -cs 2>/dev/null) ${selection}" > /etc/apt/sources.list.d/ceph.list
+    else
+        rm -f /etc/apt/sources.list.d/ceph.list
+    fi
 }
 
 set_pve_repo(){
@@ -679,6 +703,7 @@ installation_task(){
 
     set_locales
     set_pve_repo
+    set_ceph_repo
     update_system
     install_tools
     enable_sdn
