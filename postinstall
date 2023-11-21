@@ -329,7 +329,7 @@ set_locales(){
 }
 
 set_ceph_repo(){
-    log "Setting Proxmox package repositories to $ceph_repo_selection"
+    log "Setting Ceph package repositories to $ceph_repo_selection"
     if [[ "$ceph_repo_selection" != "none" ]]; then
         if [[ "$ceph_repo_selection" == *"quincy"* ]]; then
             generation=quincy
