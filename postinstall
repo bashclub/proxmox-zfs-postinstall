@@ -617,6 +617,7 @@ else
 fi
 EOF
     chmod +x /usr/local/bin/virtio-win-updater
+    rm -f /etc/cron.daily/virtio-win-updater
     cat << EOF > /etc/cron.daily/virtio-win-updater
 #!/bin/bash
 /usr/local/bin/virtio-win-updater >> /var/log/virtio-win-updater.log 2>&1
