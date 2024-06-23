@@ -1,0 +1,758 @@
+#!/bin/bash
+#
+# This script configures basic settings and install standard tools on your Proxmox VE Server with ZFS storage
+# 
+# Features:
+# + Configure ZFS ARC Cache
+# + Configure vm.swappiness
+# + Install and configure zfs-auto-snapshot
+# + Switch pve-enterprise/pve-no-subscription/pvetest repo
+# + Switch ceph repo between quincy/reef and enterprise/no-subscription/test or remove
+# + Disable "No subscription message" in webinterface in no-subscription mode
+# + Add pve-enterprise subscription key
+# + Update system to the latest version
+# + Install common tools
+# + Install Proxmox SDN Extensions
+# + Configure automatic backup of /etc Folder
+# + Configure locales
+# + SSH server hardening
+# + Install checkzfs
+# + Install bashclub-zsync
+# + Create zfspool storage for swap disks if not exists
+# + Adjust default volblocksize for Proxmox zfspool storages
+# + Configure proxmox mail delivery with postfix
+# + Daily check (and download) for new stable virtio-win iso and prune old (unused) versions
+#
+#
+# Author: (C) 2023 Thorsten Spille <thorsten@bashclub.org>
+
+set -uo pipefail
+
+#### INITIAL VARIABLES ####
+PROG=$(basename "$0")
+
+# Required tools for usage in postinstall
+REQUIRED_TOOLS="curl ifupdown2 git gron ipmitool libsasl2-modules lsb-release libpve-network-perl postfix ssl-cert"
+
+# Optional tools to install
+OPTIONAL_TOOLS="dnsutils ethtool htop iftop jq lshw lsscsi mc net-tools nvme-cli rpl screen smartmontools sudo sysstat tmux unzip vim"
+
+# Settings for Backup of /etc folder
+PVE_CONF_BACKUP_TARGET=rpool/pveconf
+PVE_CONF_BACKUP_CRON_TIMER="3,18,33,48 * * * *"
+
+# Round factor to set L1ARC cache (Megabytes)
+ROUND_FACTOR=512
+
+# get total size of all zpools
+ZPOOL_SIZE_SUM_BYTES=0
+for line in $(zpool list -o size -Hp); do ZPOOL_SIZE_SUM_BYTES=$(($ZPOOL_SIZE_SUM_BYTES+$line)); done
+
+# get information about available ram
+MEM_TOTAL_BYTES=$(($(awk '/MemTotal/ {print $2}' /proc/meminfo) * 1024))
+
+# get values if defaults are set
+ARC_MAX_DEFAULT_BYTES=$(($MEM_TOTAL_BYTES / 2))
+ARC_MIN_DEFAULT_BYTES=$(($MEM_TOTAL_BYTES / 32))
+
+# get current settings
+ARC_MIN_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_min)
+ARC_MAX_CUR_BYTES=$(cat /sys/module/zfs/parameters/zfs_arc_max)
+
+# get vm.swappiness
+SWAPPINESS=$(cat /proc/sys/vm/swappiness)
+
+# zfs-auto-snapshot default values
+declare -A auto_snap_keep=( ["frequent"]="12" ["hourly"]="96" ["daily"]="14" ["weekly"]="6" ["monthly"]="3" )
+
+setblocksize=0
+volblocksize=16k
+
+# gather proxmox subscription info
+serverid=$(pvesubscription get | grep serverid | cut -d' ' -f2)
+sub_status=$(pvesubscription get | grep status | cut -d' ' -f2)
+
+# get notification address
+recipientaddress=$(pvesh get access/users/root@pam --output-format yaml| grep email | cut -d' ' -f2)
+
+#### FUNCTIONS ####
+
+log(){
+    echo "$(date) $1"
+}
+
+roundup(){
+    echo $(((($1 + $ROUND_FACTOR) / $ROUND_FACTOR) * $ROUND_FACTOR))
+}
+
+roundoff(){
+    echo $((($1 / $ROUND_FACTOR) * $ROUND_FACTOR))
+}
+
+isnumber(){
+    re='^[0-9]+$'
+    if ! [[ $1 =~ $re ]] ; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+inputbox_int(){
+    cancel=0
+    while true; do
+        if ! out=$(whiptail --title "$1" --backtitle "$PROG" --inputbox "$2" $3 76 $4 3>&1 1>&2 2>&3) ; then
+            cancel=1 ; break 
+        fi
+        if isnumber $out; then
+            break
+        fi
+    done
+    echo $out
+    return $cancel
+}
+
+cancel_dialog() {
+    whiptail --title "CANCEL POSTINSTALL" --backtitle $PROG --msgbox "Postinstall was cancelled by user interaction" 8 76 3>&1 1>&2 2>&3
+    exit 127
+}
+
+arc_suggestion(){
+    if [ $ARC_MIN_DEFAULT_BYTES -lt 33554432 ]; then ARC_MIN_DEFAULT_MB="32" ; else ARC_MIN_DEFAULT_MB="$(($ARC_MIN_DEFAULT_BYTES / 1024 / 1024))" ; fi
+
+    ZFS_ARC_MAX_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
+    ZFS_ARC_MIN_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
+    if [ $ZFS_ARC_MIN_MEGABYTES -eq 0 ]; then
+        ZFS_ARC_MIN_MEGABYTES=$(($ZFS_ARC_MAX_MEGABYTES / 2))
+        if [ $ARC_MIN_DEFAULT_MB -gt $ZFS_ARC_MAX_MEGABYTES ]; then
+            ZFS_ARC_MIN_MEGABYTES=$ARC_MIN_DEFAULT_MB
+        fi
+    fi
+
+    if [ $ARC_MIN_CUR_BYTES -gt 0 ]; then ARC_MIN_CURRENT_MB="$(($ARC_MIN_CUR_BYTES / 1024 / 1024))" ; else ARC_MIN_CURRENT_MB="0" ; fi
+    if [ $ARC_MAX_CUR_BYTES -gt 0 ]; then ARC_MAX_CURRENT_MB="$(($ARC_MAX_CUR_BYTES / 1024 / 1024))" ; else ARC_MAX_CURRENT_MB="0" ; fi
+
+    if ! whiptail --title "CONFIGURE ZFS L1ARC SIZE" \
+    --backtitle $PROG \
+    --yes-button "Accept" \
+    --no-button "Edit" \
+    --yesno " Summary: \n \
+    System Memory: $(($MEM_TOTAL_BYTES / 1024 / 1024)) MB\n \
+    Zpool size (sum): $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024)) MB\n \
+\n \
+Note: zfs_arc_min must always be lower than zfs_arc_max! \n\n \
+The L1ARC cache suggestion is calculated by size of all zpools \n\n \
+Suggested values: \n \
+    zfs_arc_min: $(($ZFS_ARC_MIN_MEGABYTES)) MB (default: $ARC_MIN_DEFAULT_MB MB, current: $ARC_MIN_CURRENT_MB MB)\n \
+    zfs_arc_max: $(($ZFS_ARC_MAX_MEGABYTES)) MB (default: $(($ARC_MAX_DEFAULT_BYTES / 1024 / 1024)) MB, current: $ARC_MAX_CURRENT_MB MB)\n" 17 76; then
+        arc_set_manual
+    fi
+}
+
+arc_set_manual() {
+    if [ $ARC_MIN_CURRENT_MB -gt 0 ]; then MIN_VALUE=$ARC_MIN_CURRENT_MB; else MIN_VALUE=$ZFS_ARC_MIN_MEGABYTES; fi
+    if [ $ARC_MAX_CURRENT_MB -gt 0 ]; then MAX_VALUE=$ARC_MAX_CURRENT_MB; else MAX_VALUE=$ZFS_ARC_MAX_MEGABYTES; fi
+
+    if ! ZFS_ARC_MIN_MEGABYTES=$(inputbox_int 'CONFIGURE ZFS L1ARC MIN SIZE' 'Please enter zfs_arc_min in MB' 7 $MIN_VALUE) ; then cancel_dialog ; fi
+    if ! ZFS_ARC_MAX_MEGABYTES=$(inputbox_int 'CONFIGURE ZFS L1ARC MAX SIZE' 'Please enter zfs_arc_max in MB' 7 $MAX_VALUE) ; then cancel_dialog ; fi
+}
+
+vm_swappiness () {
+    if ! SWAPPINESS=$(inputbox_int "CONFIGURE SWAPPINESS" "Please enter percentage of free RAM to start swapping" 8 $SWAPPINESS) ; then cancel_dialog ; fi
+}
+
+auto_snapshot(){
+    install_zas=0
+    if whiptail --title "INSTALL ZFS-AUTO-SNAPSHOT" \
+    --backtitle "$PROG" \
+    --yes-button "INSTALL" \
+    --no-button "SKIP" \
+    --yesno "Do you want to install and configure zfs-auto-snapshot?" 9 76 ; then
+        install_zas=1
+
+        if dpkg -l zfs-auto-snapshot > /dev/null 2>&1 ; then
+            for interval in "${!auto_snap_keep[@]}"; do
+                if [[ "$interval" == "frequent" ]]; then
+                    auto_snap_keep[$interval]=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
+                else
+                    auto_snap_keep[$interval]=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
+                fi
+            done
+        fi
+        for interval in "${!auto_snap_keep[@]}"; do
+            if ! auto_snap_keep[$interval]=$(inputbox_int "CONFIGURE ZFS-AUTO-SNAPSHOT" "Please set number of $interval snapshots to keep" 7 ${auto_snap_keep[$interval]}) ; then cancel_dialog ; fi
+        done
+
+    fi
+}
+
+select_subscription(){
+    suppress_warning=0
+    if [[ $sub_status == "notfound" ]] || [[ $sub_status == "invalid" ]]; then
+        if [[ $repo_selection == "pve-enterprise" ]]; then
+            if whiptail --title "NO PROXMOX SUBSCRIPTION FOUND" \
+            --backtitle $PROG \
+            --yes-button "ADD" \
+            --no-button "SKIP" \
+            --yesno "Server ID: $serverid\n\nDo you want to add a subscription key?" 9 76 ; then
+                input_subscription
+            fi
+        else
+            if whiptail --title "NO PROXMOX SUBSCRIPTION FOUND" \
+            --backtitle $PROG \
+            --yes-button "SUPPRESS WARNING" \
+            --no-button "SKIP" \
+            --yesno "Do you want to suppress the no subscription warning in WebGUI?" 9 76 ; then
+                suppress_warning=1
+            fi
+        fi
+    fi
+}
+
+ask_locales(){
+    if ! locales=$(whiptail --title "SET LOCALES" --backtitle "$PROG" --inputbox "Please enter a space separated list of locales to generate." 9 76 "$(echo $(grep -vE '#|^$' /etc/locale.gen | cut -d ' ' -f1))" 3>&1 1>&2 2>&3); then cancel_dialog ; fi
+}
+
+ask_ssh_hardening(){
+    ssh_hardening=0
+    if whiptail --title "HARDEN SSH SERVER" \
+    --backtitle "$PROG" \
+    --yes-button "HARDEN SSH SERVER" \
+    --no-button "SKIP" \
+    --yesno "Do you want to apply the SSH hardening profile?\nHost-Keys will be changed and root-Login with password will be disabled." 9 76 ; then
+        ssh_hardening=1
+    fi
+}
+
+input_subscription(){
+    key=""
+    cancel=0
+    while [[ $key == "" ]]; do
+        if ! key=$(whiptail --title "ADD PROXMOX SUBSCRIPTION KEY" --backtitle "$PROG" \
+        --inputbox "Server ID: $serverid\n\nAdd your subscription key" 9 76 3>&1 1>&2 2>&3) ; then
+            cancel=1 ; break
+        fi
+    done
+    if [ $cancel -eq 0 ]; then
+        set_subscription $key
+    fi
+    return $cancel
+}
+
+set_subscription(){
+    log "Setting subscription key $1"
+    if ! pvesubscription set $1; then
+        input_subscription
+    elif [[ $(pvesubscription get | grep status | cut -d' ' -f2) == "invalid" ]]; then
+        input_subscription
+    fi
+}
+
+suppress_no_subscription_warning(){
+    if [ $suppress_warning -gt 0 ]; then
+        # remove old no-sub-hack
+        if [ -f /opt/bashclub/no-sub-hack.sh ] ; then rm -r /opt/bashclub ; fi
+        if [ -f /etc/apt/apt.conf.d/80bashclubapthook ] ; then rm /etc/apt/apt.conf.d/80bashclubapthook ; fi
+
+        wget -q --no-cache -O /usr/local/bin/suppress_no_subscription_warning https://github.com/bashclub/no-sub-hack/raw/main/no-sub-hack.sh
+        chmod +x /usr/local/bin/suppress_no_subscription_warning
+        /usr/local/bin/suppress_no_subscription_warning
+        cat << EOF > /etc/apt/apt.conf.d/80-suppress_no_subscription_warning
+DPkg::Post-Invoke {"/usr/local/bin/suppress_no_subscription_warning";};
+EOF
+    fi
+}
+
+select_pve_repo(){
+    pveenterprise=OFF
+    pvenosubscription=OFF
+    pvetest=OFF
+    if [ -f /etc/apt/sources.list.d/pve-enterprise.list ]; then
+        if grep -v '#' /etc/apt/sources.list.d/pve-enterprise.list | grep "pve-enterprise" > /dev/null ; then
+            pveenterprise=ON
+        else
+            if [ -f /etc/apt/sources.list ]; then
+                if grep -v '#' /etc/apt/sources.list | grep "pve-no-subscription" > /dev/null ; then
+                    pvenosubscription=ON
+                elif grep -v '#' /etc/apt/sources.list | grep "pvetest" > /dev/null ; then
+                    pvetest=ON
+                else
+                    pveenterprise=ON
+                fi 
+            fi
+        fi
+    fi
+    repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+    --radiolist "Choose Proxmox VE repository" 20 76 4 \
+    "pve-enterprise" "Proxmox VE Enterprise repository" "$pveenterprise" \
+    "pve-no-subscription" "Proxmox VE No Subscription repository" "$pvenosubscription" \
+    "pvetest" "Proxmox VE Testing repository" "$pvetest" 3>&1 1>&2 2>&3)
+
+}
+
+ask_bashclub_repo(){
+
+    bashclub_repo=0
+    install_zsync=0
+    install_virtio=0
+    if whiptail --title "INSTALL BASHCLUB REPOSITORY" \
+    --backtitle "$PROG" \
+    --yes-button "INSTALL" \
+    --no-button "SKIP" \
+    --yesno "Do you want to install the bashclub apt repository?" 9 76 ; then
+        bashclub_repo=1
+        if whiptail --title "INSTALL CHECKZFS AND ZSYNC" \
+        --backtitle "$PROG" \
+        --yes-button "INSTALL" \
+        --no-button "SKIP" \
+        --yesno "Do you want to install checkzfs and bashclub-zsync?" 9 76 ; then
+            install_zsync=1
+        fi
+        if whiptail --title "INSTALL VIRTIO-WIN-ISO" \
+        --backtitle "$PROG" \
+        --yes-button "INSTALL" \
+        --no-button "SKIP" \
+        --yesno "Do you want to install current stable virtio-win iso?" 9 76 ; then
+            install_virtio=1
+        fi
+    fi
+}
+
+select_ceph_repo(){
+    none=OFF
+    quincyenterprise=OFF
+    quincynosubscription=OFF
+    quincytest=OFF
+    reefenterprise=OFF
+    reefnosubscription=OFF
+    reeftest=OFF
+    if [ -f /etc/apt/sources.list.d/ceph.list ]; then
+        if grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "enterprise" > /dev/null ; then
+            quincyenterprise=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "enterprise" > /dev/null ; then
+            reefenterprise=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "no-subscription" > /dev/null ; then
+            quincynosubscription=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "no-subscription" > /dev/null ; then
+            reefnosubscription=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "test" > /dev/null ; then
+            quincytest=ON
+        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "test" > /dev/null ; then
+            reeftest=ON
+        else
+            none=ON
+        fi        
+    else
+        none=ON
+    fi
+    ceph_repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+    --radiolist "Choose Ceph repository" 20 76 7 \
+    "none" "No Ceph repository" "$none" \
+    "quincyenterprise" "Ceph Quincy Enterprise repository" "$quincyenterprise" \
+    "quincynosubscription" "Ceph Quincy No Subscription repository" "$quincynosubscription" \
+    "quincytest" "Ceph Quincy Testing repository" "$quincytest" \
+    "reefenterprise" "Ceph Reef Enterprise repository" "$reefenterprise" \
+    "reefnosubscription" "Ceph Reef No Subscription repository" "$reefnosubscription" \
+    "reeftest" "Ceph Reef Testing repository" "$reeftest" 3>&1 1>&2 2>&3)
+}
+
+set_locales(){
+    log "Setting locales"
+    for locale in $locales; do
+        line=$(grep $locale /etc/locale.gen)
+        if echo $line | grep "#" > /dev/null 2>&1 ; then
+            sed -i "s/$line/$(echo $line | cut -d' ' -f2-)/" /etc/locale.gen
+        fi
+    done
+    locale-gen > /dev/null 2>&1
+}
+
+set_ceph_repo(){
+    log "Setting Ceph package repositories to $ceph_repo_selection"
+    if [[ "$ceph_repo_selection" != "none" ]]; then
+        if [[ "$ceph_repo_selection" == *"quincy"* ]]; then
+            generation=quincy
+        elif [[ "$ceph_repo_selection" == *"reef"* ]]; then
+            generation=reef
+        fi
+        if [[ "$ceph_repo_selection" == *"enterprise"* ]]; then
+            selection=enterprise
+            server=https://enterprise.proxmox.com
+        elif [[ "$ceph_repo_selection" == *"nosubscription"* ]]; then
+            selection=no-subscription
+            server=http://download.proxmox.com
+        elif [[ "$ceph_repo_selection" == *"test"* ]]; then
+            selection=test
+            server=http://download.proxmox.com
+        fi
+        echo "deb ${server}/debian/ceph-${generation} $(lsb_release -cs 2>/dev/null) ${selection}" > /etc/apt/sources.list.d/ceph.list
+    else
+        rm -f /etc/apt/sources.list.d/ceph.list
+    fi
+}
+
+set_pve_repo(){
+    log "Setting Proxmox package repositories to $repo_selection"
+    nosub=$(grep pve-no-subscription /etc/apt/sources.list)
+    enterprise=$(grep pve-enterprise /etc/apt/sources.list.d/pve-enterprise.list)
+    test=$(grep pvetest /etc/apt/sources.list)
+    if [[ $repo_selection == "pve-enterprise" ]]; then
+        echo "deb https://enterprise.proxmox.com/debian/pve $VERSION_CODENAME pve-enterprise" > /etc/apt/sources.list.d/pve-enterprise.list
+        if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
+            sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+        fi
+        if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
+            sed -i "s|$test|# $test|g" /etc/apt/sources.list
+        fi
+    elif [[ $repo_selection == "pve-no-subscription" ]]; then
+        if [[ $nosub == "" ]]; then
+            echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription\n" >> /etc/apt/sources.list
+        elif [[ $nosub == *"#"* ]]; then
+            sed -i "s|$nosub|$(echo $nosub | cut -d' ' -f2-)|" /etc/apt/sources.list
+        fi
+        if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
+            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list 
+        fi
+        if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
+            sed -i "s|$test|# $test|g" /etc/apt/sources.list
+        fi
+    elif [[ $repo_selection == "pvetest" ]]; then
+        if [[ $test == "" ]]; then
+            echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pvetest\n" >> /etc/apt/sources.list
+        elif [[ $test == *"#"* ]]; then
+            sed -i "s|$test|$(echo $test | cut -d' ' -f2-)|" /etc/apt/sources.list
+        fi
+        if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
+            sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+        fi
+        if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
+            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+        fi
+    fi
+}
+
+set_bashclub_repo (){
+    if [ $bashclub_repo -gt 0 ]; then
+        log "Configuring bashclub apt repositories"
+        echo "deb [signed-by=/usr/share/keyrings/bashclub-archive-keyring.gpg] https://apt.bashclub.org/release bookworm main" > /etc/apt/sources.list.d/bashclub.list
+        wget -q -O- https://apt.bashclub.org/gpg/bashclub.pub | gpg --dearmor > /usr/share/keyrings/bashclub-archive-keyring.gpg
+    fi
+}
+
+update_system(){
+    log "Downloading latest package lists"
+    apt update > /dev/null 2>&1
+    log "Upgrading system to latest version - Depending on your version this could take a while..."
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq dist-upgrade > /dev/null 2>&1
+}
+
+install_tools(){
+    log "Installing toolset - Depending on your version this could take a while..."
+    if [ $install_zas -gt 0 ]; then
+        OPTIONAL_TOOLS="zfs-auto-snapshot $OPTIONAL_TOOLS"
+    fi
+    if [ $install_zsync -gt 0 ]; then
+        OPTIONAL_TOOLS="bashclub-zsync $OPTIONAL_TOOLS"
+    fi
+    if [ $install_virtio -gt 0 ]; then
+        OPTIONAL_TOOLS="virtio-win-iso $OPTIONAL_TOOLS"
+    fi
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $REQUIRED_TOOLS $OPTIONAL_TOOLS > /dev/null 2>&1
+}
+
+enable_sdn(){
+    log "Enabling SDN features"
+    q=$(cat /etc/network/interfaces | grep "source /etc/network/interfaces.d/*")
+    if [ $? -gt 0 ]; then
+        echo "source /etc/network/interfaces.d/*" >> /etc/network/interfaces
+    fi
+}
+
+set_arc_cache(){
+    log "Adjusting ZFS level 1 arc (Min: $ZFS_ARC_MIN_MEGABYTES, Max: $ZFS_ARC_MAX_MEGABYTES)"
+    ZFS_ARC_MIN_BYTES=$((ZFS_ARC_MIN_MEGABYTES * 1024 *1024))
+    ZFS_ARC_MAX_BYTES=$((ZFS_ARC_MAX_MEGABYTES * 1024 *1024))
+    echo $ZFS_ARC_MIN_BYTES > /sys/module/zfs/parameters/zfs_arc_min
+    echo $ZFS_ARC_MAX_BYTES > /sys/module/zfs/parameters/zfs_arc_max
+    cat << EOF > /etc/modprobe.d/zfs.conf
+options zfs zfs_arc_max=$ZFS_ARC_MAX_BYTES
+options zfs zfs_arc_min=$ZFS_ARC_MIN_BYTES
+EOF
+}
+
+set_auto_snapshot(){
+
+    if [ $install_zas -gt 0 ]; then
+        # configure zfs-auto-snapshot
+        for interval in "${!auto_snap_keep[@]}"; do
+            log "Setting zfs-auto-snapshot retention: $interval = ${auto_snap_keep[$interval]}"
+            if [[ "$interval" == "frequent" ]]; then
+                CURRENT=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
+                if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
+                    rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.d/zfs-auto-snapshot > /dev/null 2>&1
+                fi
+            else
+                CURRENT=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
+                if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
+                    rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.$interval/zfs-auto-snapshot > /dev/null 2>&1
+                fi
+            fi
+        done
+    fi
+}
+
+set_swappiness(){
+    log "Setting swappiness to $SWAPPINESS %"
+    echo "vm.swappiness=$SWAPPINESS" > /etc/sysctl.d/swappiness.conf
+    sysctl -w vm.swappiness=$SWAPPINESS > /dev/null
+}
+
+pve_conf_backup(){
+    log "Configuring pve-conf-backup"
+    zfs list $PVE_CONF_BACKUP_TARGET > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        zfs create $PVE_CONF_BACKUP_TARGET
+    fi
+
+    if [[ "$(df -h -t zfs | grep /$ | cut -d ' ' -f1)" == "rpool/ROOT/pve-1" ]] ; then
+        echo "$PVE_CONF_BACKUP_CRON_TIMER root rsync -va --delete /etc /$PVE_CONF_BACKUP_TARGET > /$PVE_CONF_BACKUP_TARGET/pve-conf-backup.log" > /etc/cron.d/pve-conf-backup
+    fi
+}
+
+harden_ssh(){
+    if [ $ssh_hardening -gt 0 ]; then
+        log "Hardening ssh server"
+        rm /etc/ssh/ssh_host_*
+        log "Creating new SSH host keys"
+        ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N "" > /dev/null 2>&1
+        ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N "" > /dev/null 2>&1
+        log "Creating new SSH moduli"
+        awk '$5 >= 3071' /etc/ssh/moduli > /etc/ssh/moduli.safe
+        mv /etc/ssh/moduli.safe /etc/ssh/moduli
+
+        log "Writing hardened SSH config"
+        if [[ $VERSION_CODENAME == "bookworm" ]]; then
+            echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,gss-curve25519-sha256-,diffie-hellman-group16-sha512,gss-group16-sha512-,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
+        elif [[ $VERSION_CODENAME == "bullseye" ]]; then
+            sed -i 's/^\#HostKey \/etc\/ssh\/ssh_host_\(rsa\|ed25519\)_key$/HostKey \/etc\/ssh\/ssh_host_\1_key/g' /etc/ssh/sshd_config
+            echo -e echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-512,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
+        fi
+        systemctl restart ssh.service
+    fi
+}
+
+ask_mail_config(){
+    mailconfig=0
+    smtpauth=0
+    displayname=""
+    recipientaddress=""
+    smtpmode=""
+    recipientaddress=""
+    senderaddress=""
+    username=""
+    password=""
+    smtphost=""
+    if whiptail --title "MAIL DELIVERY" \
+    --backtitle "$PROG" \
+    --yes-button "MAIL CONFIG" \
+    --no-button "SKIP" \
+    --yesno "Do you want to configure notifications for root@pam(OVERWRITES CURRENT CONFIG)?" 9 76 ; then
+        mailconfig=1
+        if ! displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 $(hostname -f) 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 $recipientaddress 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 "" 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        smtpmode=$(whiptail --title "SELECT SMTP MODE" --backtitle "$PROG" \
+    --radiolist "Choose SMTP mode" 20 76 7 \
+    "insecure" "insecure (tcp/25)" "OFF" \
+    "tls" "TLS (tcp/465)" "OFF" \
+    "starttls" "StartTLS (tcp/587)" "ON" 3>&1 1>&2 2>&3)
+        if ! senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 "root@$(hostname -f)" 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if whiptail --title "MAIL DELIVERY" \
+        --backtitle "$PROG" \
+        --yes-button "CONFIGURE AUTH" \
+        --no-button "SKIP" \
+        --yesno "Do you want to configure authentication against your smarthost?" 9 76 ; then
+            smtpauth=1
+            if ! username=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the username for authentication." 9 76 "" 3>&1 1>&2 2>&3); then cancel_dialog; fi
+            if ! password=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --passwordbox "Please enter the passsword for authentication." 9 76 "" 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        fi
+    fi
+}
+
+set_notification() {
+    if [ $mailconfig -gt 0 ]; then
+        cat << EOF > /etc/pve/notifications.cfg
+matcher: default-matcher
+	comment Route all notifications to mail-to-root
+	mode all
+	target smtp-notification
+
+smtp: smtp-notification
+        mailto-user root@pam
+        mailto $recipientaddress
+        author $displayname
+        from-address $senderaddress
+        server $smtphost
+        mode $smtpmode
+EOF
+        if [ $smtpauth -gt 0 ];then
+            cat << EOF >> /etc/pve/notifications.cfg
+        username $username
+
+EOF
+
+            cat << EOF > /etc/pve/priv/notifications.cfg
+smtp: smtp-notification
+        password $password
+EOF
+        fi
+
+        pvesh set access/users/root@pam -email $recipientaddress
+
+    fi
+}
+
+create_swap_pool(){
+    log "Configuring swap storage"
+    if ! pvesm status | grep swap > /dev/null; then
+        if ! zfs list rpool/swap > /dev/null 2>&1 ; then
+            zfs create -o com.sun:auto-snapshot:frequent=false -o com.sun:auto-snapshot:hourly=false -o com.sun:auto-snapshot:daily=false -o com.sun:auto-snapshot:weekly=false -o com.sun:auto-snapshot:monthly=false rpool/swap
+        else
+            zfs set com.sun:auto-snapshot:frequent=false com.sun:auto-snapshot:hourly=false com.sun:auto-snapshot:daily=false com.sun:auto-snapshot:weekly=false com.sun:auto-snapshot:monthly=false rpool/swap
+            zfs inherit com.sun:auto-snapshot rpool/swap
+        fi
+        pvesm add zfspool swap --content images,rootdir --pool rpool/swap
+    fi
+}
+
+ask_volblocksize(){
+    if whiptail --title "SET DEFAULT BLOCKSIZE" \
+    --backtitle "$PROG" \
+    --yes-button "SET BLOCKSIZE" \
+    --no-button "SKIP" \
+    --yesno "Do you want to adjust the default blocksize on all zfspool storages?" 9 76 ; then
+        setblocksize=1
+        if ! volblocksize=$(whiptail  --title "SET DEFAULT BLOCKSIZE" --backtitle "$PROG" --inputbox "Please enter the desired blocksize for your zfspool storages." 9 76 $volblocksize 3>&1 1>&2 2>&3); then cancel_dialog; fi
+    fi
+}
+
+set_default_volblocksize(){
+    if [ $setblocksize -gt 0 ]; then
+        log "Setting default volblocksize=16k to all zfspool storages"
+        for storage in $(pvesm status | grep zfspool | cut -d' ' -f1); do
+            pvesm set $storage --blocksize $volblocksize
+        done
+    fi
+}
+
+remove_virtiowin_updater() {
+    log "Removing virtio-win updater if exists"
+    if [ -f /usr/local/bin/virtio-win-updater ]; then
+        rm -f /usr/local/bin/virtio-win-updater
+    fi
+    if [ -f /etc/cron.daily/virtio-win-updater]; then
+        rm -f /etc/cron.daily/virtio-win-updater
+    fi
+}
+
+installation_task(){
+    log "Starting Installation"
+
+    set_locales
+    set_pve_repo
+    set_ceph_repo
+    set_bashclub_repo
+    update_system
+    install_tools
+    enable_sdn
+    set_arc_cache
+    set_swappiness
+    set_auto_snapshot
+    pve_conf_backup
+    suppress_no_subscription_warning
+    harden_ssh
+    set_notification
+    create_swap_pool
+    set_default_volblocksize
+    remove_virtiowin_updater
+
+    log "Updating initramfs - This will take some time..."
+    update-initramfs -u -k all > /dev/null 2>&1
+
+}
+
+summary(){
+    autosnap=""
+    for interval in "${!auto_snap_keep[@]}"; do
+        autosnap="${interval}=${auto_snap_keep[$interval]} ${autosnap}"
+    done
+
+    if whiptail --title "POSTINSTALL SUMMARY" \
+    --backtitle $PROG \
+    --yes-button "INSTALL" \
+    --no-button "ABORT & EXIT" \
+    --yesno "Summary: \n\
+    zfs_arc_min: $ZFS_ARC_MIN_MEGABYTES MB\n\
+    zfs_arc_max: $ZFS_ARC_MAX_MEGABYTES MB\n\
+    swappiness: $SWAPPINESS %\n\
+    locales: $locales\n\
+    repository: $repo_selection \n\
+    subscription: $(pvesubscription get | grep status | cut -d' ' -f2)\n\
+    suppress subscription warning: $suppress_warning\n\
+    install auto-snapshot: $install_zas ($autosnap)\n\
+    ssh-hardening: $ssh_hardening\n\
+    mail delivery: $mailconfig
+    sender email: $senderaddress
+    sender display name: $displayname
+    notification address: $recipientaddress
+    smarthost: $smtphost
+    smarthost mode: $smtpmode
+    smarthost auth: $smtpauth
+    smarthost username: $username
+    set blocksize: $setblocksize
+    volblocksize: $volblocksize
+    " 30 76 ; then
+        installation_task
+    else
+        cancel_dialog
+    fi
+}
+
+source /etc/os-release
+
+# Calculate and suggest values for ZFS L1ARC cache
+arc_suggestion
+
+# Set swapping behaviour
+vm_swappiness
+
+# Ask for additional locales 
+ask_locales
+
+# Ask for ssh hardening
+ask_ssh_hardening
+
+# Configure count per interval of zfs-auto-snapshot
+auto_snapshot
+
+# Select proxmox repository
+select_pve_repo
+
+# Select Ceoh repository
+select_ceph_repo
+
+# Ask for adding bashclub repo
+ask_bashclub_repo
+
+# subscription related actions
+select_subscription
+
+# mail delivery config
+ask_mail_config
+
+# set volblocksize 
+ask_volblocksize
+
+summary
+
+log "Proxmox postinstallation finished!"
