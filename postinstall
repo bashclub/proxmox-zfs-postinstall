@@ -561,7 +561,12 @@ ask_mail_config(){
 set_notification() {
     if [ $mailconfig -gt 0 ]; then
         cat << EOF > /etc/pve/notifications.cfg
-smtp: $smtphost
+matcher: default-matcher
+	comment Route all notifications to mail-to-root
+	mode all
+	target smtp-notification
+
+smtp: smtp-notification
         mailto-user root@pam
         mailto $recipientaddress
         author $displayname
@@ -576,7 +581,7 @@ EOF
 EOF
 
             cat << EOF > /etc/pve/priv/notifications.cfg
-smtp: $smtphost
+smtp: smtp-notification
         password $password
 EOF
         fi
