@@ -352,7 +352,7 @@ set_locales(){
     log "Setting locales"
     for locale in $locales; do
         line=$(grep $locale /etc/locale.gen)
-        if echo $line | grep "#" ; then
+        if echo $line | grep "#" > /dev/null 2>&1 ; then
             sed -i "s/$line/$(echo $line | cut -d' ' -f2-)/" /etc/locale.gen
         fi
     done
@@ -427,7 +427,7 @@ set_bashclub_repo (){
     if [ $bashclub_repo -gt 0 ]; then
         log "Configuring bashclub apt repositories"
         echo "deb [signed-by=/usr/share/keyrings/bashclub-archive-keyring.gpg] https://apt.bashclub.org/release bookworm main" > /etc/apt/sources.list.d/bashclub.list
-        wget -O- https://apt.bashclub.org/gpg/bashclub.pub | gpg --dearmor > /usr/share/keyrings/bashclub-archive-keyring.gpg
+        wget -q -O- https://apt.bashclub.org/gpg/bashclub.pub | gpg --dearmor > /usr/share/keyrings/bashclub-archive-keyring.gpg
     fi
 }
 
