@@ -294,6 +294,7 @@ ask_bashclub_repo(){
 
     bashclub_repo=0
     install_zsync=0
+    install_virtio=0
     if whiptail --title "INSTALL BASHCLUB REPOSITORY" \
     --backtitle "$PROG" \
     --yes-button "INSTALL" \
@@ -306,6 +307,13 @@ ask_bashclub_repo(){
         --no-button "SKIP" \
         --yesno "Do you want to install checkzfs and bashclub-zsync?" 9 76 ; then
             install_zsync=1
+        fi
+        if whiptail --title "INSTALL VIRTIO-WIN-ISO" \
+        --backtitle "$PROG" \
+        --yes-button "INSTALL" \
+        --no-button "SKIP" \
+        --yesno "Do you want to install current stable virtio-win iso?" 9 76 ; then
+            install_virtio=1
         fi
     fi
 }
@@ -445,6 +453,9 @@ install_tools(){
     fi
     if [ $install_zsync -gt 0 ]; then
         OPTIONAL_TOOLS="bashclub-zsync $OPTIONAL_TOOLS"
+    fi
+    if [ $install_virtio -gt 0 ]; then
+        OPTIONAL_TOOLS="virtio-win-iso $OPTIONAL_TOOLS"
     fi
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $REQUIRED_TOOLS $OPTIONAL_TOOLS > /dev/null 2>&1
 }
@@ -634,54 +645,14 @@ set_default_volblocksize(){
     fi
 }
 
-virtiowin_updater() {
-    log "Installing virtio-win-updater"
-    cat << EOF > /usr/local/bin/virtio-win-updater
-#!/bin/bash
-#
-# This script updates the virtio-win iso in Proxmox local storage
-content=\$(wget -q -O - https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/)
-server=https://fedorapeople.org
-path=\$(echo -e "\$content" | grep -m1 title | cut -d "<" -f2 | cut -d " " -f3)
-file=\$(echo -e "\$content" | grep -Eo "virtio-win-0.1.[0-9]+.iso" | grep -m1 virtio)
-url=\$server\$path/\$file
-if ! find /var/lib/vz/template/iso/\$file > /dev/null 2>&1 ; then
-    echo "\$(date) New version available. Downloading \$file."
-    wget -q -O /var/lib/vz/template/iso/\$file \$url
-    old_virtio=\$(find /var/lib/vz/template/iso/ -name virtio-win* | grep -v \$file)
-    if [ \$? -eq 0 ]; then
-        for line in \$old_virtio; do
-            if ! grep \$(echo \$line | cut -d'/' -f7) /etc/pve/qemu-server/* ; then
-                echo "\$(date) Deleting \$line."
-                rm -f \$line
-            else
-                echo "\$(date) Keeping \$line - Still in use by VMs."
-            fi
-        done
+remove_virtiowin_updater() {
+    log "Removing virtio-win updater if exists"
+    if [ -f /usr/local/bin/virtio-win-updater ]; then
+        rm -f /usr/local/bin/virtio-win-updater
     fi
-else
-    echo "\$(date) Already on the current stable version: \$file."
-fi
-EOF
-    chmod +x /usr/local/bin/virtio-win-updater
-    rm -f /etc/cron.daily/virtio-win-updater
-    cat << EOF > /etc/cron.daily/virtio-win-updater
-#!/bin/bash
-/usr/local/bin/virtio-win-updater >> /var/log/virtio-win-updater.log 2>&1
-EOF
-    cat << EOF > /etc/logrotate.d/virtio-win-updater
-/var/log/virtio-win-updater.log {
-    weekly
-    rotate 12
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 644 root root
-}
-EOF
-    log "Running virtio-win-updater"
-    virtio-win-updater
+    if [ -f /etc/cron.daily/virtio-win-updater]; then
+        rm -f /etc/cron.daily/virtio-win-updater
+    fi
 }
 
 installation_task(){
@@ -703,7 +674,7 @@ installation_task(){
     set_notification
     create_swap_pool
     set_default_volblocksize
-    virtiowin_updater
+    remove_virtiowin_updater
 
     log "Updating initramfs - This will take some time..."
     update-initramfs -u -k all > /dev/null 2>&1
