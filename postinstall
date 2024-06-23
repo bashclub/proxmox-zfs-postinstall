@@ -32,7 +32,7 @@ set -uo pipefail
 PROG=$(basename "$0")
 
 # Required tools for usage in postinstall
-REQUIRED_TOOLS="curl ifupdown2 git gron ipmitool libsasl2-modules lsb-release libpve-network-perl postfix ssl-cert zfs-auto-snapshot"
+REQUIRED_TOOLS="curl ifupdown2 git gron ipmitool libsasl2-modules lsb-release libpve-network-perl postfix ssl-cert"
 
 # Optional tools to install
 OPTIONAL_TOOLS="dnsutils ethtool htop iftop jq lshw lsscsi mc net-tools nvme-cli rpl screen smartmontools sudo sysstat tmux unzip vim"
@@ -162,18 +162,28 @@ vm_swappiness () {
 }
 
 auto_snapshot(){
-    if dpkg -l zfs-auto-snapshot > /dev/null 2>&1 ; then
+    install_zas=0
+    if whiptail --title "INSTALL ZFS-AUTO-SNAPSHOT" \
+    --backtitle "$PROG" \
+    --yes-button "INSTALL" \
+    --no-button "SKIP" \
+    --yesno "Do you want to install and configure zfs-auto-snapshot?" 9 76 ; then
+        install_zas=1
+
+        if dpkg -l zfs-auto-snapshot > /dev/null 2>&1 ; then
+            for interval in "${!auto_snap_keep[@]}"; do
+                if [[ "$interval" == "frequent" ]]; then
+                    auto_snap_keep[$interval]=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
+                else
+                    auto_snap_keep[$interval]=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
+                fi
+            done
+        fi
         for interval in "${!auto_snap_keep[@]}"; do
-            if [[ "$interval" == "frequent" ]]; then
-                auto_snap_keep[$interval]=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
-            else
-                auto_snap_keep[$interval]=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
-            fi
+            if ! auto_snap_keep[$interval]=$(inputbox_int "CONFIGURE ZFS-AUTO-SNAPSHOT" "Please set number of $interval snapshots to keep" 7 ${auto_snap_keep[$interval]}) ; then cancel_dialog ; fi
         done
+
     fi
-    for interval in "${!auto_snap_keep[@]}"; do
-        if ! auto_snap_keep[$interval]=$(inputbox_int "CONFIGURE ZFS-AUTO-SNAPSHOT" "Please set number of $interval snapshots to keep" 7 ${auto_snap_keep[$interval]}) ; then cancel_dialog ; fi
-    done
 }
 
 select_subscription(){
@@ -278,6 +288,26 @@ select_pve_repo(){
     "pve-no-subscription" "Proxmox VE No Subscription repository" "$pvenosubscription" \
     "pvetest" "Proxmox VE Testing repository" "$pvetest" 3>&1 1>&2 2>&3)
 
+}
+
+ask_bashclub_repo(){
+
+    bashclub_repo=0
+    install_zsync=0
+    if whiptail --title "INSTALL BASHCLUB REPOSITORY" \
+    --backtitle "$PROG" \
+    --yes-button "INSTALL" \
+    --no-button "SKIP" \
+    --yesno "Do you want to install the bashclub apt repository?" 9 76 ; then
+        bashclub_repo=1
+        if whiptail --title "INSTALL CHECKZFS AND ZSYNC" \
+        --backtitle "$PROG" \
+        --yes-button "INSTALL" \
+        --no-button "SKIP" \
+        --yesno "Do you want to install checkzfs and bashclub-zsync?" 9 76 ; then
+            install_zsync=1
+        fi
+    fi
 }
 
 select_ceph_repo(){
@@ -393,6 +423,14 @@ set_pve_repo(){
     fi
 }
 
+set_bashclub_repo (){
+    if [ $bashclub_repo -gt 0 ]; then
+        log "Configuring bashclub apt repositories"
+        echo "deb [signed-by=/usr/share/keyrings/bashclub-archive-keyring.gpg] https://apt.bashclub.org/release bookworm main" > /etc/apt/sources.list.d/bashclub.list
+        wget -O- https://apt.bashclub.org/gpg/bashclub.pub | gpg --dearmor > /usr/share/keyrings/bashclub-archive-keyring.gpg
+    fi
+}
+
 update_system(){
     log "Downloading latest package lists"
     apt update > /dev/null 2>&1
@@ -402,6 +440,12 @@ update_system(){
 
 install_tools(){
     log "Installing toolset - Depending on your version this could take a while..."
+    if [ $install_zas -gt 0 ]; then
+        OPTIONAL_TOOLS="zfs-auto-snapshot $OPTIONAL_TOOLS"
+    fi
+    if [ $install_zsync -gt 0 ]; then
+        OPTIONAL_TOOLS="bashclub-zsync $OPTIONAL_TOOLS"
+    fi
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt -y -qq install $REQUIRED_TOOLS $OPTIONAL_TOOLS > /dev/null 2>&1
 }
 
@@ -426,21 +470,24 @@ EOF
 }
 
 set_auto_snapshot(){
-    # configure zfs-auto-snapshot
-    for interval in "${!auto_snap_keep[@]}"; do
-        log "Setting zfs-auto-snapshot retention: $interval = ${auto_snap_keep[$interval]}"
-        if [[ "$interval" == "frequent" ]]; then
-            CURRENT=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
-            if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
-                rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.d/zfs-auto-snapshot > /dev/null 2>&1
+
+    if [ $install_zas -gt 0 ]; then
+        # configure zfs-auto-snapshot
+        for interval in "${!auto_snap_keep[@]}"; do
+            log "Setting zfs-auto-snapshot retention: $interval = ${auto_snap_keep[$interval]}"
+            if [[ "$interval" == "frequent" ]]; then
+                CURRENT=$(cat /etc/cron.d/zfs-auto-snapshot | grep keep | cut -d' ' -f19 | cut -d '=' -f2)
+                if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
+                    rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.d/zfs-auto-snapshot > /dev/null 2>&1
+                fi
+            else
+                CURRENT=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
+                if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
+                    rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.$interval/zfs-auto-snapshot > /dev/null 2>&1
+                fi
             fi
-        else
-            CURRENT=$(cat /etc/cron.$interval/zfs-auto-snapshot | grep keep | cut -d' ' -f6 | cut -d'=' -f2)
-            if [[ "${auto_snap_keep[$interval]}" != "$CURRENT" ]]; then
-                rpl "keep=$CURRENT" "keep=${auto_snap_keep[$interval]}" /etc/cron.$interval/zfs-auto-snapshot > /dev/null 2>&1
-            fi
-        fi
-    done
+        done
+    fi
 }
 
 set_swappiness(){
@@ -620,36 +667,6 @@ set_default_volblocksize(){
     fi
 }
 
-install_checkzfs(){
-    log "Installing checkzfs to /usr/local/bin/checkzfs"
-    wget -q --no-cache -O /usr/local/bin/checkzfs https://raw.githubusercontent.com/bashclub/check-zfs-replication/main/checkzfs.py
-    chmod +x /usr/local/bin/checkzfs
-    log "Installing check-snapshot-age to /usr/local/bin/check-snapshot-age"
-    wget -q --no-cache -O /usr/local/bin/check-snapshot-age https://raw.githubusercontent.com/bashclub/check-zfs-replication/main/check-snapshot-age
-    chmod +x /usr/local/bin/check-snapshot-age
-}
-
-install_zsync(){
-    log "Installing bashclub-zsync"
-    wget -q --no-cache -O /usr/bin/bashclub-zsync https://git.bashclub.org/bashclub/zsync/raw/branch/main/bashclub-zsync/usr/bin/bashclub-zsync
-    chmod +x /usr/bin/bashclub-zsync
-    cat << EOF > /etc/logrotate.d/bashclub-zsync
-/var/log/bashclub-zsync/*.log {
-    weekly
-    rotate 12
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 644 root root
-}
-EOF
-    mkdir -p /var/log/bashclub-zsync
-    cat << EOF > /etc/cron.d/bashclub-zsync
-#00 23 * * * root /usr/bin/bashclub-zsync -c /etc/bashclub/zsync.conf > /var/log/bashclub-zsync/zsync.log
-EOF
-}
-
 virtiowin_updater() {
     log "Installing virtio-win-updater"
     cat << EOF > /usr/local/bin/virtio-win-updater
@@ -706,6 +723,7 @@ installation_task(){
     set_locales
     set_pve_repo
     set_ceph_repo
+    set_bashclub_repo
     update_system
     install_tools
     enable_sdn
@@ -715,8 +733,6 @@ installation_task(){
     pve_conf_backup
     suppress_no_subscription_warning
     harden_ssh
-    install_checkzfs
-    install_zsync
     set_mail_delivery
     create_swap_pool
     set_default_volblocksize
@@ -745,7 +761,7 @@ summary(){
     repository: $repo_selection \n\
     subscription: $(pvesubscription get | grep status | cut -d' ' -f2)\n\
     suppress subscription warning: $suppress_warning\n\
-    auto-snapshot: $autosnap\n\
+    install auto-snapshot: $install_zas ($autosnap)\n\
     ssh-hardening: $ssh_hardening\n\
     mail delivery: $mailconfig
     sender email: $senderaddress
@@ -786,6 +802,9 @@ select_pve_repo
 
 # Select Ceoh repository
 select_ceph_repo
+
+# Ask for adding bashclub repo
+ask_bashclub_repo
 
 # subscription related actions
 select_subscription
