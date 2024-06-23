@@ -531,106 +531,58 @@ harden_ssh(){
 }
 
 ask_mail_config(){
-    mailconfig=0
-    smtpauth=0
-    senderaddress=""
-    displayname=""
-    if [ -f /etc/postfix/sender_canonical_maps ]; then
-        senderaddress=$(grep "@" -m1 /etc/postfix/sender_canonical_maps | cut -d '<' -f2 | cut -d '>' -f1)
-        displayname=$(grep "@" -m1 /etc/postfix/sender_canonical_maps | cut -d' ' -f5)
-    fi
-    smtphost=$(grep relayhost /etc/postfix/main.cf | cut -d : -f1 | cut -d ' ' -f3 | cut -d ']' -f1 | cut -d '[' -f2)
-    smtpport=$(grep relayhost /etc/postfix/main.cf | cut -d':' -f2)
-    if [[ $smtpport == "" ]] || [[ $smtpport == "relayhost" ]]; then
-        smtpport=25
-    fi    
-    username=""
-    password=""
-    if [ -f /etc/postfix/sasl_passwd ]; then
-        username=$(cat /etc/postfix/sasl_passwd | cut -d ' ' -f2- | cut -d':' -f1)
-        password=$(cat /etc/postfix/sasl_passwd | cut -d ' ' -f2- | cut -d':' -f2-)
-    else
-        username=$senderaddress
-    fi
     if whiptail --title "MAIL DELIVERY" \
     --backtitle "$PROG" \
     --yes-button "MAIL CONFIG" \
     --no-button "SKIP" \
-    --yesno "Do you want to configure postfix with a smarthost?" 9 76 ; then
+    --yesno "Do you want to configure notifications for root@pam(OVERWRITES CURRENT CONFIG)?" 9 76 ; then
         mailconfig=1
         if ! displayname=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender display name." 9 76 $(hostname -f) 3>&1 1>&2 2>&3); then cancel_dialog; fi
         if ! recipientaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the email address to receive notifications." 9 76 $recipientaddress 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 $smtphost 3>&1 1>&2 2>&3); then cancel_dialog; fi
-        smtpport=$(inputbox_int 'MAIL DELIVERY' 'Please enter the port of your smarthost' 7 $smtpport)
-        if ! senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 $senderaddress 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        if ! smtphost=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the servername of your smarthost." 9 76 "" 3>&1 1>&2 2>&3); then cancel_dialog; fi
+        smtpmode=$(whiptail --title "SELECT SMTP MODE" --backtitle "$PROG" \
+    --radiolist "Choose SMTP mode" 20 76 7 \
+    "insecure" "insecure (tcp/25)" "OFF" \
+    "tls" "TLS (tcp/465)" "OFF" \
+    "starttls" "StartTLS (tcp/587)" "ON" 3>&1 1>&2 2>&3)
+        if ! senderaddress=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter your sender email address." 9 76 "root@$(hostname -f)" 3>&1 1>&2 2>&3); then cancel_dialog; fi
         if whiptail --title "MAIL DELIVERY" \
         --backtitle "$PROG" \
         --yes-button "CONFIGURE AUTH" \
         --no-button "SKIP" \
         --yesno "Do you want to configure authentication against your smarthost?" 9 76 ; then
             smtpauth=1
-            if ! username=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the username for authentication." 9 76 $username 3>&1 1>&2 2>&3); then cancel_dialog; fi
-            if ! password=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --passwordbox "Please enter the passsword for authentication." 9 76 $password 3>&1 1>&2 2>&3); then cancel_dialog; fi
+            if ! username=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --inputbox "Please enter the username for authentication." 9 76 "" 3>&1 1>&2 2>&3); then cancel_dialog; fi
+            if ! password=$(whiptail  --title "MAIL DELIVERY" --backtitle "$PROG" --passwordbox "Please enter the passsword for authentication." 9 76 "" 3>&1 1>&2 2>&3); then cancel_dialog; fi
         fi
     fi
 }
 
-set_mail_delivery(){
+set_notification() {
     if [ $mailconfig -gt 0 ]; then
-        log "Configuring mail delivery"
-        cat << EOF > /etc/postfix/main.cf
-myhostname=$(hostname -f)
-smtpd_banner = \$myhostname ESMTP \$mail_name (Debian/GNU)
-biff = no
-append_dot_mydomain = no
-alias_maps = hash:/etc/aliases
-alias_database = hash:/etc/aliases
-mydestination = \$myhostname, localhost.\$mydomain, localhost
-mynetworks = 127.0.0.0/8
-inet_interfaces = loopback-only
-recipient_delimiter = +
-compatibility_level = 2
+        cat << EOF > /etc/pve/notifications.cfg
+smtp: $smtphost
+        mailto-user root@pam
+        mailto $recipientaddress
+        author $displayname
+        from-address $senderaddress
+        server $smtphost
+        mode $smtpmode
+EOF
+        if [ $smtpauth -gt 0 ];then
+            cat << EOF >> /etc/pve/notifications.cfg
+        username $username
 
-#### sasl extension
-relayhost = [$smtphost]:$smtpport
-smtp_tls_CAfile = /etc/postfix/cacert.pem
-smtp_use_tls = yes
-sender_canonical_classes = envelope_sender, header_sender
-sender_canonical_maps =  regexp:/etc/postfix/sender_canonical_maps
-smtp_header_checks = regexp:/etc/postfix/header_check
 EOF
 
-        cat << EOF > /etc/postfix/header_check
-/From:.*/ REPLACE From: $displayname <$senderaddress>
-EOF
-
-        cat << EOF > /etc/postfix/sender_canonical_maps
-/.+/    $displayname <$senderaddress>
-EOF
-
-        if [ $smtpauth -gt 0 ]; then
-            cat << EOF > /etc/postfix/sasl_passwd
-[$smtphost]:$smtpport $username:$password
-EOF
-            postmap /etc/postfix/sasl_passwd > /dev/null 2>&1
-            postmap /etc/aliases > /dev/null 2>&1
-            chown root:root /etc/postfix/sasl_passwd
-            chown root:root /etc/postfix/sasl_passwd.db
-            chmod 0600 /etc/postfix/sasl_passwd
-            chmod 0600 /etc/postfix/sasl_passwd.db
-
-            cat << EOF >> /etc/postfix/main.cf
-smtp_sasl_auth_enable = yes
-smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
-smtp_sasl_security_options = noanonymous
+            cat << EOF > /etc/pve/priv/notifications.cfg
+smtp: $smtphost
+        password $password
 EOF
         fi
 
-        ln -sf /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/postfix/cacert.pem 
-
-        systemctl restart postfix.service
-
         pvesh set access/users/root@pam -email $recipientaddress
+
     fi
 }
 
@@ -733,7 +685,7 @@ installation_task(){
     pve_conf_backup
     suppress_no_subscription_warning
     harden_ssh
-    set_mail_delivery
+    set_notification
     create_swap_pool
     set_default_volblocksize
     virtiowin_updater
@@ -768,7 +720,7 @@ summary(){
     sender display name: $displayname
     notification address: $recipientaddress
     smarthost: $smtphost
-    smarthost port: $smtpport
+    smarthost mode: $smtpmode
     smarthost auth: $smtpauth
     smarthost username: $username
     set blocksize: $setblocksize
