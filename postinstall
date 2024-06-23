@@ -531,6 +531,7 @@ harden_ssh(){
 }
 
 ask_mail_config(){
+    mailconfig=0
     if whiptail --title "MAIL DELIVERY" \
     --backtitle "$PROG" \
     --yes-button "MAIL CONFIG" \
