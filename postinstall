@@ -532,6 +532,15 @@ harden_ssh(){
 
 ask_mail_config(){
     mailconfig=0
+    smtpauth=0
+    displayname=""
+    recipientaddress=""
+    smtpmode=""
+    recipientaddress=""
+    senderaddress=""
+    username=""
+    password=""
+    smtphost=""
     if whiptail --title "MAIL DELIVERY" \
     --backtitle "$PROG" \
     --yes-button "MAIL CONFIG" \
