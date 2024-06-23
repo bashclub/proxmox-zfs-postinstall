@@ -1,6 +1,6 @@
 # proxmox-zfs-postinstall
 
-This script installs and configures basic tools for running a Proxmox Server.
+This script installs and configures basic tools for running a new Proxmox Server (Version 8+).
 Following settings are made:
 - Install and configure zfs-auto-snapshot
 - Switch pve-enterprise/pve-no-subscription/pvetest repo
@@ -15,16 +15,16 @@ Following settings are made:
 - SSH server hardening
 - Install checkzfs
 - Install bashclub-zsync
+- Install virtio-win ISO
 - Create zfspool storage for swap disks if not exists
 - Adjust default volblocksize for Proxmox zfspool storage
-- Configure proxmox mail delivery with postfix
-- Daily check (and download) for new stable virtio-win iso and prune old (unused) versions
+- Configure proxmox mail delivery proxmox notifications (pve8) 
 
 # Usage
 
 Just download and execute the script, all settings are made interactively.
 ```
-wget -O ./postinstall --no-cache https://github.com/bashclub/proxmox-zfs-postinstall/raw/dev/postinstall
+wget -O ./postinstall --no-cache https://github.com/bashclub/proxmox-zfs-postinstall/raw/main/postinstall
 bash ./postinstall
 ```
 
