@@ -650,7 +650,7 @@ remove_virtiowin_updater() {
     if [ -f /usr/local/bin/virtio-win-updater ]; then
         rm -f /usr/local/bin/virtio-win-updater
     fi
-    if [ -f /etc/cron.daily/virtio-win-updater]; then
+    if [ -f /etc/cron.daily/virtio-win-updater ]; then
         rm -f /etc/cron.daily/virtio-win-updater
     fi
 }
