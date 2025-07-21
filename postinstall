@@ -284,18 +284,17 @@ ex "\$filename" <<eof
 .
 xit
 eof
+systemctl restart pveproxy.service
 EOF
         chmod +x /usr/local/bin/suppress_no_subscription_warning
         cat << EOF > /etc/apt/apt.conf.d/80-suppress_no_subscription_warning
 DPkg::Post-Invoke {"/usr/local/bin/suppress_no_subscription_warning";};
 EOF
-        /usr/local/bin/suppress_no_subscription_warning
     else
         if [ -f /usr/local/bin/suppress_no_subscription_warning ] ; then rm /usr/local/bin/suppress_no_subscription_warning ; fi
         if [ -f /etc/apt/apt.conf.d/80-suppress_no_subscription_warning ] ; then rm /etc/apt/apt.conf.d/80-suppress_no_subscription_warning ; fi
     fi
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install --reinstall -y -qq proxmox-widget-toolkit > /dev/null 2>&1
-    systemctl restart pveproxy.service
 }
 
 select_pve_repo(){
