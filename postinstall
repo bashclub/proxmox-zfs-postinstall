@@ -24,7 +24,7 @@
 # + Daily check (and download) for new stable virtio-win iso and prune old (unused) versions
 #
 #
-# Author: (C) 2023 Thorsten Spille <thorsten@bashclub.org>
+# Author: (C) 2025 Thorsten Spille <thorsten@bashclub.org>
 
 set -uo pipefail
 
@@ -74,6 +74,13 @@ sub_status=$(pvesubscription get | grep status | cut -d' ' -f2)
 
 # get notification address
 recipientaddress=$(pvesh get access/users/root@pam --output-format yaml| grep email | cut -d' ' -f2)
+
+# Default content for local storage
+content="vztmpl,import,iso"
+
+ask_local_content(){
+    if ! content=$(whiptail --title "SET LOCAL STORAGE CONTENT" --backtitle "$PROG" --inputbox "Please enter the content types for local storage (comma separated, allowed values: images,rootdir,vztmpl,backup,iso,import,snippets):" 9 76 "$content" 3>&1 1>&2 2>&3); then cancel_dialog ; fi
+}
 
 #### FUNCTIONS ####
 
@@ -201,8 +208,8 @@ select_subscription(){
             if whiptail --title "NO PROXMOX SUBSCRIPTION FOUND" \
             --backtitle $PROG \
             --yes-button "SUPPRESS WARNING" \
-            --no-button "SKIP" \
-            --yesno "Do you want to suppress the no subscription warning in WebGUI?" 9 76 ; then
+            --no-button "REMOVE HACK" \
+            --yesno "Do you want to suppress the no subscription warning in WebUI?" 9 76 ; then
                 suppress_warning=1
             fi
         fi
@@ -249,18 +256,46 @@ set_subscription(){
 }
 
 suppress_no_subscription_warning(){
+    # remove old no-sub-hack
+    if [ -f /opt/bashclub/no-sub-hack.sh ] ; then rm -r /opt/bashclub ; fi
+    if [ -f /etc/apt/apt.conf.d/80bashclubapthook ] ; then rm /etc/apt/apt.conf.d/80bashclubapthook ; fi
     if [ $suppress_warning -gt 0 ]; then
-        # remove old no-sub-hack
-        if [ -f /opt/bashclub/no-sub-hack.sh ] ; then rm -r /opt/bashclub ; fi
-        if [ -f /etc/apt/apt.conf.d/80bashclubapthook ] ; then rm /etc/apt/apt.conf.d/80bashclubapthook ; fi
+        cat << EOF > /usr/local/bin/suppress_no_subscription_warning
+#!/bin/bash
+# Proxmox no-subsscription hack
 
-        wget -q --no-cache -O /usr/local/bin/suppress_no_subscription_warning https://github.com/bashclub/no-sub-hack/raw/main/no-sub-hack.sh
+filename=/usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+
+# Finde die erste Zeile mit checked_command
+first_line=\$(grep -n -m1 'checked_command' "\$filename" | cut -d':' -f1)
+# Hole die Einrückung der Startzeile
+indent=\$(sed -n "\${first_line}p" "\$filename" | grep -o '^[[:space:]]*')
+# Suche ab first_line die erste Zeile, die mit identischer Einrückung und '},' endet
+last_line=\$(( \$(tail -n "+\${first_line}" "\$filename" | grep -nxm1 "^\${indent}},\$" | cut -d':' -f1) + first_line - 1 ))
+
+# Entferne den Block
+sed -i "\${first_line},\${last_line}d" "\$filename"
+
+# Füge die neue checked_command-Funktion an der richtigen Stelle ein
+insert_line=\$(( first_line - 1 ))
+ex "\$filename" <<eof
+\${insert_line} insert
+\${indent}checked_command: function(orig_cmd) { orig_cmd(); },
+.
+xit
+eof
+EOF
         chmod +x /usr/local/bin/suppress_no_subscription_warning
-        /usr/local/bin/suppress_no_subscription_warning
         cat << EOF > /etc/apt/apt.conf.d/80-suppress_no_subscription_warning
 DPkg::Post-Invoke {"/usr/local/bin/suppress_no_subscription_warning";};
 EOF
+        /usr/local/bin/suppress_no_subscription_warning
+    else
+        if [ -f /usr/local/bin/suppress_no_subscription_warning ] ; then rm /usr/local/bin/suppress_no_subscription_warning ; fi
+        if [ -f /etc/apt/apt.conf.d/80-suppress_no_subscription_warning ] ; then rm /etc/apt/apt.conf.d/80-suppress_no_subscription_warning ; fi
     fi
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install --reinstall -y -qq proxmox-widget-toolkit > /dev/null 2>&1
+    systemctl restart pveproxy.service
 }
 
 select_pve_repo(){
@@ -655,6 +690,21 @@ remove_virtiowin_updater() {
     fi
 }
 
+set_autotrim=0
+set_autoexpand=0
+
+ask_autotrim(){
+    if whiptail --title "ENABLE AUTOTRIM" --backtitle "$PROG" --yes-button "ENABLE" --no-button "SKIP" --yesno "Enable autotrim on all supported zpools?" 9 76 ; then
+        set_autotrim=1
+    fi
+}
+
+ask_autoexpand(){
+    if whiptail --title "ENABLE AUTOEXPAND" --backtitle "$PROG" --yes-button "ENABLE" --no-button "SKIP" --yesno "Enable autoexpand on all zpools?" 9 76 ; then
+        set_autoexpand=1
+    fi
+}
+
 installation_task(){
     log "Starting Installation"
 
@@ -676,9 +726,26 @@ installation_task(){
     set_default_volblocksize
     remove_virtiowin_updater
 
+    if [ $set_autotrim -gt 0 ]; then
+        log "Enabling autotrim on all supported zpools"
+        for p in $(zpool list -H -o name); do
+            if ! zpool status -t $p | grep -q "trim unsupported"; then
+                zpool set autotrim=on $p
+            fi
+        done
+    fi
+    if [ $set_autoexpand -gt 0 ]; then
+        log "Enabling autoexpand on all zpools"
+        for p in $(zpool list -H -o name); do
+            zpool set autoexpand=on $p
+        done
+    fi
+
+    log "Setting local storage content to: $content"
+    pvesm set local --content ${content}
+
     log "Updating initramfs - This will take some time..."
     update-initramfs -u -k all > /dev/null 2>&1
-
 }
 
 summary(){
@@ -709,8 +776,16 @@ summary(){
     smarthost mode: $smtpmode
     smarthost auth: $smtpauth
     smarthost username: $username
-    set blocksize: $setblocksize
-    volblocksize: $volblocksize
+    set blocksize: $setblocksize\n\
+    volblocksize: $volblocksize\n\
+    local storage content: $content\n\
+    ceph repository: $ceph_repo_selection\n\
+    bashclub repository: $bashclub_repo\n\
+    virtio-win iso: $install_virtio\n\
+    zsync: $install_zsync\n\
+    autotrim: $set_autotrim\n\
+    autoexpand: $set_autoexpand\n\
+    Do you want to continue?
     " 30 76 ; then
         installation_task
     else
@@ -752,6 +827,13 @@ ask_mail_config
 
 # set volblocksize 
 ask_volblocksize
+
+# ask for local storage content
+ask_local_content
+
+# ask for autotrim/autoexpand
+ask_autotrim
+ask_autoexpand
 
 summary
 

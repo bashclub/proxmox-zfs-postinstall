@@ -1,24 +1,44 @@
 # proxmox-zfs-postinstall
 
-This script installs and configures basic tools for running a new Proxmox Server (Version 8+).
-Following settings are made:
-- Install and configure zfs-auto-snapshot
-- Switch pve-enterprise/pve-no-subscription/pvetest repo
-- Switch ceph repo between quincy/reef and enterprise/no-subscription/test or remove it
-- Disable "No subscription message" in webinterface in no-subscription mode
-- Add pve-enterprise subscription key
+This script installs and configures essential and advanced tools for a new Proxmox Server (Version 8+), with ZFS storage. All settings are made interactively via Dialog/Whiptail.
+
+> [!IMPORTANT]  
+> Please download the updated version of this script and re-run, if your Proxmox WebUI doesn't show up after update to 8.4.5 or 9.0.0 beta
+
+## Features
+- Configure ZFS ARC Cache (optimizes RAM usage for ZFS)
+- Configure vm.swappiness (kernel swap behavior)
+- Install and configure zfs-auto-snapshot (automatic ZFS snapshots, individually configurable)
+- Switch between pve-enterprise, pve-no-subscription, pvetest repositories
+- Switch Ceph repo between quincy/reef and enterprise/no-subscription/test or remove it
+- Disable "No subscription message" in web interface (for no-subscription)
+- Add pve-enterprise subscription key (optional)
 - Update system to the latest version
-- Install common tools
+- Install common tools (curl, git, htop, etc.)
 - Install Proxmox SDN Extensions
-- Configure automatic backup of /etc Folder
-- Configure locales
-- SSH server hardening
+- Configure automatic backup of /etc folder (ZFS + cron)
+- Configure locales (language and region settings)
+- SSH server hardening (new host keys, restrictive algorithms, disable root login with password)
 - Install checkzfs
 - Install bashclub-zsync
-- Install virtio-win ISO
+- Install virtio-win ISO (including automatic cleanup of old versions)
 - Create zfspool storage for swap disks if not exists
-- Adjust default volblocksize for Proxmox zfspool storage
-- Configure proxmox mail delivery proxmox notifications (pve8) 
+- Adjust default volblocksize for Proxmox zfspool storages
+- Configure Proxmox mail delivery and notifications (SMTP, Auth, TLS/StartTLS)
+- Remove old virtio-win-updater
+- Set content of proxmox storage "local" (remove ability to save backups)
+- Enable autotrim on all supported ZFS pools
+- Enable autoexpand on all ZFS pools
+
+## Workflow
+- The script guides you step by step through all important configurations.
+- All settings are queried interactively and can be customized.
+- After the summary, all selected options are automatically applied.
+
+## Requirements
+- Proxmox VE 8.x (tested with Bookworm)
+- Root privileges required
+- Internet connection for package installation
 
 # Usage
 
