@@ -262,9 +262,15 @@ suppress_no_subscription_warning(){
     if [ $suppress_warning -gt 0 ]; then
         cat << EOF > /usr/local/bin/suppress_no_subscription_warning
 #!/bin/bash
-# Proxmox no-subsscription hack
+# Proxmox no-subscription hack
 
 filename=/usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+
+# Prüfe, ob checked_command bereits im gewünschten Zustand ist
+if grep -q 'checked_command: function(orig_cmd) { orig_cmd(); },' "\$filename"; then
+    echo "checked_command bereits gepatcht, keine Änderung notwendig."
+    exit 0
+fi
 
 # Finde die erste Zeile mit checked_command
 first_line=\$(grep -n -m1 'checked_command' "\$filename" | cut -d':' -f1)
