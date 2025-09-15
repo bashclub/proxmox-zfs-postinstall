@@ -130,8 +130,12 @@ arc_suggestion(){
     ZFS_ARC_MAX_MEGABYTES=$(roundup $(($ZPOOL_SIZE_SUM_BYTES / 1024 / 1024 / 1024)))
     ZFS_ARC_MIN_MEGABYTES=$(roundoff $(($ZPOOL_SIZE_SUM_BYTES / 2048 / 1024 / 1024)))
     if [ $ZFS_ARC_MIN_MEGABYTES -eq 0 ]; then
+        # Setze Min als Fallback auf die Hälfte von Max.
         ZFS_ARC_MIN_MEGABYTES=$(($ZFS_ARC_MAX_MEGABYTES / 2))
-        if [ $ARC_MIN_DEFAULT_MB -gt $ZFS_ARC_MAX_MEGABYTES ]; then
+
+        # Prüfe, ob der RAM-basierte Default-Min-Wert eine bessere Option ist,
+        # ABER nur, wenn dieser Wert auch kleiner als der Max-Wert ist.
+        if [[ $ARC_MIN_DEFAULT_MB -gt $ZFS_ARC_MIN_MEGABYTES && $ARC_MIN_DEFAULT_MB -lt $ZFS_ARC_MAX_MEGABYTES ]]; then
             ZFS_ARC_MIN_MEGABYTES=$ARC_MIN_DEFAULT_MB
         fi
     fi
@@ -307,18 +311,38 @@ select_pve_repo(){
     pveenterprise=OFF
     pvenosubscription=OFF
     pvetest=OFF
-    if [ -f /etc/apt/sources.list.d/pve-enterprise.list ]; then
-        if grep -v '#' /etc/apt/sources.list.d/pve-enterprise.list | grep "pve-enterprise" > /dev/null ; then
+    if [[ $VERSION_CODENAME == "bookworm" ]]; then
+        if [ -f /etc/apt/sources.list.d/pve-enterprise.list ]; then
+            if grep -v '#' /etc/apt/sources.list.d/pve-enterprise.list | grep "pve-enterprise" > /dev/null ; then
+                pveenterprise=ON
+            else
+                if [ -f /etc/apt/sources.list ]; then
+                    if grep -v '#' /etc/apt/sources.list | grep "pve-no-subscription" > /dev/null ; then
+                        pvenosubscription=ON
+                    elif grep -v '#' /etc/apt/sources.list | grep "pvetest" > /dev/null ; then
+                        pvetest=ON
+                    else
+                        pveenterprise=ON
+                    fi 
+                fi
+            fi
+        fi
+    elif [[ $VERSION_CODENAME == "trixie" ]]; then
+        echo "Ensuring all apt sources are modernized"
+        apt -y modernize-sources
+        if [ -f /etc/apt/sources.list.d/pve-enterprise.sources ] && ( [[ $(grep Enabled /etc/apt/sources.list.d/pve-enterprise.sources) == *"Yes"* ]] || ! grep Enabled /etc/apt/sources.list.d/pve-enterprise.sources > /dev/null ) ; then 
             pveenterprise=ON
         else
-            if [ -f /etc/apt/sources.list ]; then
-                if grep -v '#' /etc/apt/sources.list | grep "pve-no-subscription" > /dev/null ; then
-                    pvenosubscription=ON
-                elif grep -v '#' /etc/apt/sources.list | grep "pvetest" > /dev/null ; then
-                    pvetest=ON
-                else
-                    pveenterprise=ON
-                fi 
+            if [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
+                if [[ $(grep Enabled /etc/apt/sources.list.d/proxmox.sources) == "Yes" ]] || ! grep Enabled /etc/apt/sources.list.d/proxmox.sources > /dev/null ; then
+                    if grep "pve-no-subscription" /etc/apt/sources.list.d/proxmox.sources > /dev/null ; then
+                        pvenosubscription=ON
+                    elif grep "pvetest" /etc/apt/sources.list.d/proxmox.sources > /dev/null ; then
+                        pvetest=ON
+                    else
+                        pveenterprise=ON
+                    fi
+                fi
             fi
         fi
     fi
@@ -363,37 +387,68 @@ select_ceph_repo(){
     quincyenterprise=OFF
     quincynosubscription=OFF
     quincytest=OFF
+    squidenterprise=OFF
+    squidnosubscription=OFF
+    squidtest=OFF
     reefenterprise=OFF
     reefnosubscription=OFF
     reeftest=OFF
-    if [ -f /etc/apt/sources.list.d/ceph.list ]; then
-        if grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "enterprise" > /dev/null ; then
-            quincyenterprise=ON
-        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "enterprise" > /dev/null ; then
-            reefenterprise=ON
-        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "no-subscription" > /dev/null ; then
-            quincynosubscription=ON
-        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "no-subscription" > /dev/null ; then
-            reefnosubscription=ON
-        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "test" > /dev/null ; then
-            quincytest=ON
-        elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "test" > /dev/null ; then
-            reeftest=ON
+    if [[ "$VERSION_CODENAME" == "bookworm" ]]; then
+        if [ -f /etc/apt/sources.list.d/ceph.list ]; then
+            if grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "enterprise" > /dev/null ; then
+                quincyenterprise=ON
+            elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "enterprise" > /dev/null ; then
+                reefenterprise=ON
+            elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "no-subscription" > /dev/null ; then
+                quincynosubscription=ON
+            elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "no-subscription" > /dev/null ; then
+                reefnosubscription=ON
+            elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "quincy" | grep "test" > /dev/null ; then
+                quincytest=ON
+            elif grep -v '#' /etc/apt/sources.list.d/ceph.list | grep "reef" | grep "test" > /dev/null ; then
+                reeftest=ON
+            else
+                none=ON
+            fi        
         else
             none=ON
-        fi        
+        fi
+        ceph_repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+        --radiolist "Choose Ceph repository" 20 76 7 \
+        "none" "No Ceph repository" "$none" \
+        "quincyenterprise" "Ceph Quincy Enterprise repository" "$quincyenterprise" \
+        "quincynosubscription" "Ceph Quincy No Subscription repository" "$quincynosubscription" \
+        "quincytest" "Ceph Quincy Testing repository" "$quincytest" \
+        "reefenterprise" "Ceph Reef Enterprise repository" "$reefenterprise" \
+        "reefnosubscription" "Ceph Reef No Subscription repository" "$reefnosubscription" \
+        "reeftest" "Ceph Reef Testing repository" "$reeftest" 3>&1 1>&2 2>&3)
+
     else
-        none=ON
+        if [ -f /etc/apt/sources.list.d/ceph.sources ]; then
+            if [[ $(grep Enabled /etc/apt/sources.list.d/ceph.sources) == "Yes" ]] || ! grep Enabled /etc/apt/sources.list.d/ceph.sources > /dev/null ; then
+                if grep "enterprise" /etc/apt/sources.list.d/ceph.sources > /dev/null ; then
+                    squidenterprise=ON
+                elif grep "no-subscription" /etc/apt/sources.list.d/ceph.sources > /dev/null ; then
+                    squidnosubscription=ON
+                elif grep "test" /etc/apt/sources.list.d/ceph.sources > /dev/null ; then
+                    squidtest=ON
+                else
+                    none=ON
+                fi
+            else
+                none=ON
+            fi
+        else
+            none=ON
+        fi
+
+        ceph_repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
+        --radiolist "Choose Ceph repository" 20 76 4 \
+        "none" "No Ceph repository" "$none" \
+        "squidenterprise" "Ceph Squid Enterprise repository" "$squidenterprise" \
+        "squidnosubscription" "Ceph Squid No Subscription repository" "$squidnosubscription" \
+        "squidtest" "Ceph Squid Testing repository" "$squidtest" 3>&1 1>&2 2>&3)
     fi
-    ceph_repo_selection=$(whiptail --title "SELECT PVE REPOSITORY" --backtitle "$PROG" \
-    --radiolist "Choose Ceph repository" 20 76 7 \
-    "none" "No Ceph repository" "$none" \
-    "quincyenterprise" "Ceph Quincy Enterprise repository" "$quincyenterprise" \
-    "quincynosubscription" "Ceph Quincy No Subscription repository" "$quincynosubscription" \
-    "quincytest" "Ceph Quincy Testing repository" "$quincytest" \
-    "reefenterprise" "Ceph Reef Enterprise repository" "$reefenterprise" \
-    "reefnosubscription" "Ceph Reef No Subscription repository" "$reefnosubscription" \
-    "reeftest" "Ceph Reef Testing repository" "$reeftest" 3>&1 1>&2 2>&3)
 }
 
 set_locales(){
@@ -410,7 +465,9 @@ set_locales(){
 set_ceph_repo(){
     log "Setting Ceph package repositories to $ceph_repo_selection"
     if [[ "$ceph_repo_selection" != "none" ]]; then
-        if [[ "$ceph_repo_selection" == *"quincy"* ]]; then
+        if [[ "$ceph_repo_selection" == *"squid"* ]]; then
+            generation=squid
+        elif [[ "$ceph_repo_selection" == *"quincy"* ]]; then
             generation=quincy
         elif [[ "$ceph_repo_selection" == *"reef"* ]]; then
             generation=reef
@@ -425,48 +482,84 @@ set_ceph_repo(){
             selection=test
             server=http://download.proxmox.com
         fi
-        echo "deb ${server}/debian/ceph-${generation} $(lsb_release -cs 2>/dev/null) ${selection}" > /etc/apt/sources.list.d/ceph.list
+        if [[ "$VERSION_CODENAME" == "bookworm" ]] ; then
+            echo "deb ${server}/debian/ceph-${generation} $(lsb_release -cs 2>/dev/null) ${selection}" > /etc/apt/sources.list.d/ceph.list
+        else
+            cat << EOF > /etc/apt/sources.list.d/ceph.sources
+Types: deb
+URIs: http://download.proxmox.com/debian/ceph-${generation}
+Suites: $VERSION_CODENAME
+Components: ${selection}
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+EOF
+        fi
     else
-        rm -f /etc/apt/sources.list.d/ceph.list
+        if [[ "$VERSION_CODENAME" == "bookworm" ]] ; then
+            rm -f /etc/apt/sources.list.d/ceph.list
+        else
+            rm -f /etc/apt/sources.list.d/ceph.sources
+        fi
     fi
 }
 
 set_pve_repo(){
     log "Setting Proxmox package repositories to $repo_selection"
-    nosub=$(grep pve-no-subscription /etc/apt/sources.list)
-    enterprise=$(grep pve-enterprise /etc/apt/sources.list.d/pve-enterprise.list)
-    test=$(grep pvetest /etc/apt/sources.list)
-    if [[ $repo_selection == "pve-enterprise" ]]; then
-        echo "deb https://enterprise.proxmox.com/debian/pve $VERSION_CODENAME pve-enterprise" > /etc/apt/sources.list.d/pve-enterprise.list
-        if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
-            sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+    if [[ "$VERSION_CODENAME" == "bookworm" ]]; then
+        nosub=$(grep pve-no-subscription /etc/apt/sources.list)
+        enterprise=$(grep pve-enterprise /etc/apt/sources.list.d/pve-enterprise.list)
+        test=$(grep pvetest /etc/apt/sources.list)
+        if [[ $repo_selection == "pve-enterprise" ]]; then
+            echo "deb https://enterprise.proxmox.com/debian/pve $VERSION_CODENAME pve-enterprise" > /etc/apt/sources.list.d/pve-enterprise.list
+            if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
+                sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+            fi
+            if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
+                sed -i "s|$test|# $test|g" /etc/apt/sources.list
+            fi
+        elif [[ $repo_selection == "pve-no-subscription" ]]; then
+            if [[ $nosub == "" ]]; then
+                echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription\n" >> /etc/apt/sources.list
+            elif [[ $nosub == *"#"* ]]; then
+                sed -i "s|$nosub|$(echo $nosub | cut -d' ' -f2-)|" /etc/apt/sources.list
+            fi
+            if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
+                sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list 
+            fi
+            if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
+                sed -i "s|$test|# $test|g" /etc/apt/sources.list
+            fi
+        elif [[ $repo_selection == "pvetest" ]]; then
+            if [[ $test == "" ]]; then
+                echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pvetest\n" >> /etc/apt/sources.list
+            elif [[ $test == *"#"* ]]; then
+                sed -i "s|$test|$(echo $test | cut -d' ' -f2-)|" /etc/apt/sources.list
+            fi
+            if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
+                sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
+            fi
+            if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
+                sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+            fi
         fi
-        if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
-            sed -i "s|$test|# $test|g" /etc/apt/sources.list
-        fi
-    elif [[ $repo_selection == "pve-no-subscription" ]]; then
-        if [[ $nosub == "" ]]; then
-            echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pve-no-subscription\n" >> /etc/apt/sources.list
-        elif [[ $nosub == *"#"* ]]; then
-            sed -i "s|$nosub|$(echo $nosub | cut -d' ' -f2-)|" /etc/apt/sources.list
-        fi
-        if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
-            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list 
-        fi
-        if [[ $test != "" ]] && [[ $test != *"#"* ]]; then
-            sed -i "s|$test|# $test|g" /etc/apt/sources.list
-        fi
-    elif [[ $repo_selection == "pvetest" ]]; then
-        if [[ $test == "" ]]; then
-            echo -e "\ndeb http://download.proxmox.com/debian/pve $VERSION_CODENAME pvetest\n" >> /etc/apt/sources.list
-        elif [[ $test == *"#"* ]]; then
-            sed -i "s|$test|$(echo $test | cut -d' ' -f2-)|" /etc/apt/sources.list
-        fi
-        if [[ $nosub != "" ]] && [[ $nosub != *"#"* ]]; then
-            sed -i "s|$nosub|# $nosub|g" /etc/apt/sources.list
-        fi
-        if [[ $enterprise != "" ]] && [[ $enterprise != *"#"* ]]; then
-            sed -i "s|$enterprise|# $enterprise|g" /etc/apt/sources.list.d/pve-enterprise.list
+    else
+        if [[ $repo_selection == "pve-enterprise" ]]; then
+            rm -f /etc/apt/sources.list.d/proxmox.sources
+            cat << EOF > /etc/apt/sources.list.d/pve-enterprise.sources
+Types: deb
+URIs: https://enterprise.proxmox.com/debian/pve
+Suites: $VERSION_CODENAME
+Components: pve-enterprise
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+EOF
+        elif [[ $repo_selection == "pve-no-subscription" ]] || [[ $repo_selection == "pvetest" ]]; then
+            rm -f /etc/apt/sources.list.d/pve-enterprise.sources
+        cat << EOF > /etc/apt/sources.list.d/proxmox.sources
+Types: deb
+URIs: http://download.proxmox.com/debian/pve/
+Suites: $VERSION_CODENAME
+Components: $repo_selection
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+EOF
         fi
     fi
 }
@@ -474,8 +567,18 @@ set_pve_repo(){
 set_bashclub_repo (){
     if [ $bashclub_repo -gt 0 ]; then
         log "Configuring bashclub apt repositories"
-        echo "deb [signed-by=/usr/share/keyrings/bashclub-archive-keyring.gpg] https://apt.bashclub.org/release bookworm main" > /etc/apt/sources.list.d/bashclub.list
         wget -q -O- https://apt.bashclub.org/gpg/bashclub.pub | gpg --dearmor > /usr/share/keyrings/bashclub-archive-keyring.gpg
+        if [[ "$VERSION_CODENAME" == "bookworm" ]]; then
+            echo "deb [signed-by=/usr/share/keyrings/bashclub-archive-keyring.gpg] https://apt.bashclub.org/release $VERSION_CODENAME main" > /etc/apt/sources.list.d/bashclub.list
+        else
+            cat << EOF > /etc/apt/sources.list.d/bashclub.sources
+Types: deb
+URIs: https://apt.bashclub.org/release/
+Suites: $VERSION_CODENAME
+Components: main
+Signed-By: /usr/share/keyrings/bashclub-archive-keyring.gpg
+EOF
+        fi
     fi
 }
 
@@ -571,12 +674,7 @@ harden_ssh(){
         mv /etc/ssh/moduli.safe /etc/ssh/moduli
 
         log "Writing hardened SSH config"
-        if [[ $VERSION_CODENAME == "bookworm" ]]; then
-            echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,gss-curve25519-sha256-,diffie-hellman-group16-sha512,gss-group16-sha512-,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
-        elif [[ $VERSION_CODENAME == "bullseye" ]]; then
-            sed -i 's/^\#HostKey \/etc\/ssh\/ssh_host_\(rsa\|ed25519\)_key$/HostKey \/etc\/ssh\/ssh_host_\1_key/g' /etc/ssh/sshd_config
-            echo -e echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-512,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
-        fi
+        echo -e "\n# Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com\n# hardening guide.\nKexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,gss-curve25519-sha256-,diffie-hellman-group16-sha512,gss-group16-sha512-,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256\nCiphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr\nMACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com\nHostKeyAlgorithms ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com" > /etc/ssh/sshd_config.d/ssh-audit_hardening.conf
         systemctl restart ssh.service
     fi
 }
@@ -799,6 +897,11 @@ summary(){
 }
 
 source /etc/os-release
+
+if [[ "bookworm trixie" != *"$VERSION_CODENAME"* ]]; then
+    echo "Your Proxmox VE version $VERSION_CONDENAME is unsuported. Please use Proxmox 8 (bookworm) or Proxmox 9 (trixie). Exiting"
+    exit 1
+fi
 
 # Calculate and suggest values for ZFS L1ARC cache
 arc_suggestion
