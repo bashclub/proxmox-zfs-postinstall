@@ -11,7 +11,6 @@ This script installs and configures essential and advanced tools for a new Proxm
 - Install and configure zfs-auto-snapshot (automatic ZFS snapshots, individually configurable)
 - Switch between pve-enterprise, pve-no-subscription, pvetest repositories
 - Switch Ceph repo between quincy/reef and enterprise/no-subscription/test or remove it
-- Disable "No subscription message" in web interface (for no-subscription)
 - Add pve-enterprise subscription key (optional)
 - Update system to the latest version
 - Install common tools (curl, git, htop, etc.)
